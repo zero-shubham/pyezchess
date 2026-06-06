@@ -17,7 +17,7 @@ from langgraph.runtime import Runtime
 from langgraph.store.postgres.aio import AsyncPostgresStore
 
 from domain.game.model import Event, EventRole, EventType
-from domain.instructor.model import LLMClient, NextMoveOutput, ScoreOutput, ToolExecutor
+from domain.instructor.model import LLMClient, MessageOutput, NextMoveOutput, ScoreOutput, ToolExecutor
 from domain.instructor.prompt import PromptGetter
 from domain.toolprovider.service import ToolProvider
 
@@ -49,6 +49,7 @@ class MoveState:
     _current_step: str = ""
     _pre_fen: str = ""
     _analysis: str = ""
+    _top_moves_str: str = ""
 
 
 @dataclass
@@ -80,7 +81,10 @@ Student move: {move}
 
 You (Vishy) are playing as {vishy_color}. The student is {student_color}.
 
-Use evaluate_move to analyze candidate moves. Focus on finding the strongest reply that maintains or builds positional advantage. Prefer developing moves over passive ones, and tactical threats over quiet moves when the position permits.
+Stockfish top 3 candidate moves for this position:
+{top_moves}
+
+Evaluate these candidates further with evaluate_move to determine the best reply. You may also evaluate other candidates if you see a strong alternative not listed above. Prefer developing moves over passive ones, and tactical threats over quiet moves when the position permits.
 
 If required, use the get_session_history tool to retrieve past events from this game session for additional context."""
 
@@ -94,7 +98,10 @@ Legal moves: {legal_moves}
 
 You (Vishy) are playing as {vishy_color}. The student is {student_color}.
 
-Use evaluate_move to analyze candidates from the legal moves list. Pick the strongest move available. Focus on maintaining positional advantage.
+Stockfish top 3 candidate moves for this position:
+{top_moves}
+
+Evaluate these candidates from the legal moves list using evaluate_move. Pick the strongest move available. Focus on maintaining positional advantage.
 
 If required, use the get_session_history tool to retrieve past events from this game session for additional context."""
 
@@ -117,9 +124,7 @@ FEN (after student move): {fen}
 Student move: {move}
 Instructor response: {next_move}
 
-Explain to the student why {next_move} was chosen in response. 2-3 sentences.
-
-If required, use the get_session_history tool to retrieve past events from this game session for additional context."""
+Explain to the student why {next_move} was chosen in response. 2-3 sentences."""
 
 MOVE_EXTRACT_PROMPT = """Workflow: move, step: compute_next_move (extraction)
 
@@ -131,9 +136,7 @@ You (Vishy) are playing as {vishy_color}. The student is {student_color}.
 Position analysis results:
 {analysis}
 
-Choose the single best response move based on the evaluation data.
-
-If required, use the get_session_history tool to retrieve past events from this game session for additional context."""
+Choose the single best response move based on the evaluation data."""
 
 MOVE_RETRY_EXTRACT_PROMPT = """Workflow: move, step: regenerate_move (extraction)
 
@@ -147,9 +150,7 @@ Legal moves: {legal_moves}
 Position analysis results:
 {analysis}
 
-Previous move "{invalid_move}" was invalid. Choose the best move from the legal moves list based on the evaluation data.
-
-If required, use the get_session_history tool to retrieve past events from this game session for additional context."""
+Previous move "{invalid_move}" was invalid. Choose the best move from the legal moves list based on the evaluation data."""
 
 SCORE_OUTPUT_TOOL = StructuredTool.from_function(
     func=lambda grade, delta, reason: json.dumps({"grade": grade, "delta": delta, "reason": reason}),
@@ -158,26 +159,16 @@ SCORE_OUTPUT_TOOL = StructuredTool.from_function(
     args_schema=ScoreOutput,
 )
 
-NEXT_MOVE_OUTPUT_TOOL = StructuredTool.from_function(
-    func=lambda move: json.dumps({"move": move}),
-    name="NextMoveOutput",
-    description="Output the chosen chess move in SAN notation",
-    args_schema=NextMoveOutput,
-)
-
 
 def _player_colors(white: str) -> tuple[str, str]:
-    """Return (vishy_color, student_color) based on who plays white."""
     if white == "instructor":
         return ("white", "black")
     return ("black", "white")
 
 
-class MoveWorkflow:
-    def __init__(self, llm: LLMClient, game_svc: GameSvcProto, tool_executor: ToolExecutor, tools: list[BaseTool]) -> None:
+class _WorkflowBase:
+    def __init__(self, llm: LLMClient, tools: list[BaseTool]) -> None:
         self._llm = llm
-        self._game_svc = game_svc
-        self._tool_executor = tool_executor
         self._tools = tools
         self._llm_with_tools = llm.bind_tools(self._tools)
 
@@ -196,23 +187,33 @@ class MoveWorkflow:
         messages.append(SystemMessage(content=system_content))
         return messages
 
-    def _parse_structured_tool(self, message: BaseMessage) -> dict:
+    @staticmethod
+    def _parse_structured_tool(message: BaseMessage) -> dict:
         content = str(message.content or "")
         try:
             return json.loads(content)
         except (json.JSONDecodeError, TypeError):
             return {}
 
-    def _last_message_content(self, state: MoveState) -> str:
+    @staticmethod
+    def _last_message_content(state) -> str:
         if state.messages:
             return str(getattr(state.messages[-1], "content", "") or "")
         return ""
 
     def _make_llm_node(self, step: str):
-        async def node(state: MoveState) -> dict:
+        async def node(state) -> dict:
+            logger.info(f"CONTEXT HAS {len(state.messages)} messages")
             response = await self._llm_with_tools.ainvoke(state.messages)
             return {"messages": [response], "_current_step": step}
         return node
+
+
+class EvaluateWorkflow(_WorkflowBase):
+    def __init__(self, llm: LLMClient, game_svc: GameSvcProto, tool_executor: ToolExecutor, tools: list[BaseTool]) -> None:
+        super().__init__(llm, tools)
+        self._game_svc = game_svc
+        self._tool_executor = tool_executor
 
     async def _prepare_score(self, state: MoveState, runtime: Runtime[MoveContext]) -> dict:
         board = self._game_svc.board
@@ -328,48 +329,68 @@ class MoveWorkflow:
         commentary = self._last_message_content(state).strip()
         return {"commentary": commentary}
 
+
+class InstructorMoveWorkflow(_WorkflowBase):
+    def __init__(self, llm: LLMClient, game_svc: GameSvcProto, tool_provider: ToolProvider, tools: list[BaseTool]) -> None:
+        super().__init__(llm, tools)
+        self._game_svc = game_svc
+        self._tool_provider = tool_provider
+        self._llm_structured_move = llm.with_structured_output(NextMoveOutput)
+        self._llm_structured_message = llm.with_structured_output(MessageOutput)
+
+    async def _get_top_moves_str(self, fen: str) -> str:
+        try:
+            moves, err = await self._tool_provider.get_top_moves(fen, n=3)
+            if err.error:
+                logger.warning("get_top_moves returned error: %s", err.error)
+                return "Unavailable"
+            lines = [f"{i}. {m.move} ({m.score})" for i, m in enumerate(moves, 1)]
+            return "\n".join(lines)
+        except Exception:
+            logger.exception("failed to get top moves")
+            return "Unavailable"
+
     async def _prepare_move_analysis(self, state: MoveState) -> dict:
         vishy_color, student_color = _player_colors(state.white)
+        top_moves_str = await self._get_top_moves_str(state.fen)
         prompt = INSTRUCTOR_MOVE_PROMPT.format(
             fen=state.fen, move=state.move,
-            vishy_color=vishy_color, student_color=student_color)
+            vishy_color=vishy_color, student_color=student_color,
+            top_moves=top_moves_str)
         return {
             "messages": self._build_messages(prompt),
+            "_top_moves_str": top_moves_str,
         }
 
-    async def _extract_move_analysis(self, state: MoveState) -> dict:
+    async def _structured_next_move(self, state: MoveState) -> dict:
         raw_text = self._last_message_content(state).strip()
         vishy_color, student_color = _player_colors(state.white)
         prompt = MOVE_EXTRACT_PROMPT.format(
             fen=state.fen, move=state.move,
             vishy_color=vishy_color, student_color=student_color,
             analysis=raw_text)
-        return {
-            "messages": self._build_messages(prompt),
-            "_analysis": raw_text,
-        }
-
-    async def _extract_next_move(self, state: MoveState) -> dict:
-        next_move = ""
-        if state.messages:
-            parsed = self._parse_structured_tool(state.messages[-1])
-            next_move = parsed.get("move", "")
-        logger.info("extract_next_move: move=%s", next_move)
+        messages = self._build_messages(prompt)
+        result = await self._llm_structured_move.ainvoke(messages)
+        next_move = result.move if result else ""
+        logger.info("structured_next_move: move=%s", next_move)
         return {"next_move": next_move, "invalid_move": "", "_current_step": "validate"}
 
     async def _prepare_move_retry(self, state: MoveState) -> dict:
         vishy_color, student_color = _player_colors(state.white)
         invalid_move = state.next_move or state.invalid_move
+        top_moves_str = state._top_moves_str or await self._get_top_moves_str(state.fen)
         prompt = INSTRUCTOR_MOVE_RETRY_PROMPT.format(
             fen=state.fen, move=state.move, invalid_move=invalid_move,
             legal_moves=", ".join(state.legal_moves),
-            vishy_color=vishy_color, student_color=student_color)
+            vishy_color=vishy_color, student_color=student_color,
+            top_moves=top_moves_str)
         return {
             "messages": self._build_messages(prompt),
             "_current_step": "move_retry",
+            "_top_moves_str": top_moves_str,
         }
 
-    async def _extract_move_retry(self, state: MoveState) -> dict:
+    async def _structured_retry_move(self, state: MoveState) -> dict:
         raw_text = self._last_message_content(state).strip()
         vishy_color, student_color = _player_colors(state.white)
         invalid_move = state.next_move or state.invalid_move
@@ -378,31 +399,18 @@ class MoveWorkflow:
             legal_moves=", ".join(state.legal_moves),
             invalid_move=invalid_move, analysis=raw_text,
             vishy_color=vishy_color, student_color=student_color)
-        return {
-            "messages": self._build_messages(prompt),
-            "_current_step": "move_retry_extraction",
-            "_analysis": raw_text,
-        }
-
-    async def _extract_retry_move(self, state: MoveState) -> dict:
-        next_move = ""
-        if state.messages:
-            parsed = self._parse_structured_tool(state.messages[-1])
-            next_move = parsed.get("move", "")
-        invalid_move = state.next_move or state.invalid_move
-        logger.info("extract_retry_move: move=%s", next_move)
+        messages = self._build_messages(prompt)
+        result = await self._llm_structured_move.ainvoke(messages)
+        next_move = result.move if result else ""
+        logger.info("structured_retry_move: move=%s", next_move)
         return {"next_move": next_move, "invalid_move": invalid_move, "_current_step": "validate"}
 
-    async def _prepare_message(self, state: MoveState) -> dict:
+    async def _generate_message(self, state: MoveState) -> dict:
         prompt = MESSAGE_PROMPT.format(
             fen=state.fen, move=state.move, next_move=state.next_move)
-        return {
-            "messages": self._build_messages(prompt),
-            "_current_step": "message",
-        }
-
-    async def _extract_message(self, state: MoveState) -> dict:
-        message = self._last_message_content(state).strip()
+        messages = self._build_messages(prompt)
+        result = await self._llm_structured_message.ainvoke(messages)
+        message = result.message if result else ""
         if state.game_session_id and state.next_move:
             try:
                 await self._game_svc.add_event(Event(
@@ -427,25 +435,24 @@ class MoveWorkflow:
         return {"message": message, "_current_step": "done"}
 
 
-def _route_tools_back(state: MoveState) -> str:
+def _route_evaluate_tools_back(state: MoveState) -> str:
     for msg in reversed(state.messages):
         if not hasattr(msg, "name"):
             break
         if msg.name == "ScoreOutput":
             return "extract_score"
-        if msg.name == "NextMoveOutput":
-            if state._current_step == "move_extract":
-                return "extract_next_move"
-            return "extract_retry_move"
 
     mapping = {
         "score": "llm_score",
         "commentary": "llm_commentary",
+    }
+    return mapping.get(state._current_step, END)
+
+
+def _route_move_tools_back(state: MoveState) -> str:
+    mapping = {
         "analysis": "llm_analysis",
-        "move_extract": "llm_move_extract",
-        "retry": "llm_retry",
-        "retry_extract": "llm_retry_extract",
-        "message": "llm_message",
+        "move_retry": "llm_retry",
     }
     return mapping.get(state._current_step, END)
 
@@ -458,33 +465,20 @@ def _route_after_validate(state: MoveState) -> str:
     return "prepare_message"
 
 
-def build_move_workflow(mw: MoveWorkflow) -> StateGraph:
+def build_evaluate_workflow(ew: EvaluateWorkflow) -> StateGraph:
     builder = StateGraph(MoveState, context_schema=MoveContext)
 
     builder.add_node("start", lambda state: {})
 
-    builder.add_node("prepare_score", mw._prepare_score)
-    builder.add_node("extract_score", mw._extract_score)
-    builder.add_node("prepare_commentary", mw._prepare_commentary)
-    builder.add_node("extract_commentary", mw._extract_commentary)
-    builder.add_node("prepare_move_analysis", mw._prepare_move_analysis)
-    builder.add_node("extract_move_analysis", mw._extract_move_analysis)
-    builder.add_node("extract_next_move", mw._extract_next_move)
-    builder.add_node("prepare_move_retry", mw._prepare_move_retry)
-    builder.add_node("extract_move_retry", mw._extract_move_retry)
-    builder.add_node("extract_retry_move", mw._extract_retry_move)
-    builder.add_node("prepare_message", mw._prepare_message)
-    builder.add_node("extract_message", mw._extract_message)
+    builder.add_node("prepare_score", ew._prepare_score)
+    builder.add_node("extract_score", ew._extract_score)
+    builder.add_node("prepare_commentary", ew._prepare_commentary)
+    builder.add_node("extract_commentary", ew._extract_commentary)
 
-    builder.add_node("llm_score", mw._make_llm_node("score"))
-    builder.add_node("llm_commentary", mw._make_llm_node("commentary"))
-    builder.add_node("llm_analysis", mw._make_llm_node("analysis"))
-    builder.add_node("llm_move_extract", mw._make_llm_node("move_extract"))
-    builder.add_node("llm_retry", mw._make_llm_node("retry"))
-    builder.add_node("llm_retry_extract", mw._make_llm_node("retry_extract"))
-    builder.add_node("llm_message", mw._make_llm_node("message"))
+    builder.add_node("llm_score", ew._make_llm_node("score"))
+    builder.add_node("llm_commentary", ew._make_llm_node("commentary"))
 
-    builder.add_node("tools", ToolNode(mw._tools))
+    builder.add_node("tools", ToolNode(ew._tools))
 
     builder.set_entry_point("start")
     builder.add_edge("start", "prepare_score")
@@ -495,33 +489,50 @@ def build_move_workflow(mw: MoveWorkflow) -> StateGraph:
 
     builder.add_edge("prepare_commentary", "llm_commentary")
     builder.add_conditional_edges("llm_commentary", tools_condition, {"tools": "tools", END: "extract_commentary"})
-    builder.add_edge("extract_commentary", "prepare_move_analysis")
+    builder.add_edge("extract_commentary", END)
+
+    builder.add_conditional_edges("tools", _route_evaluate_tools_back)
+
+    return builder
+
+
+def build_instructor_move_workflow(imw: InstructorMoveWorkflow) -> StateGraph:
+    builder = StateGraph(MoveState, context_schema=MoveContext)
+
+    builder.add_node("start", lambda state: {})
+
+    builder.add_node("prepare_move_analysis", imw._prepare_move_analysis)
+    builder.add_node("structured_next_move", imw._structured_next_move)
+    builder.add_node("prepare_move_retry", imw._prepare_move_retry)
+    builder.add_node("structured_retry_move", imw._structured_retry_move)
+    builder.add_node("generate_message", imw._generate_message)
+
+    builder.add_node("llm_analysis", imw._make_llm_node("analysis"))
+    builder.add_node("llm_retry", imw._make_llm_node("move_retry"))
+
+    builder.add_node("tools", ToolNode(imw._tools))
+
+    builder.set_entry_point("start")
+    builder.add_edge("start", "prepare_move_analysis")
 
     builder.add_edge("prepare_move_analysis", "llm_analysis")
-    builder.add_conditional_edges("llm_analysis", tools_condition, {"tools": "tools", END: "extract_move_analysis"})
-    builder.add_edge("extract_move_analysis", "llm_move_extract")
+    builder.add_conditional_edges("llm_analysis", tools_condition, {"tools": "tools", END: "structured_next_move"})
 
-    builder.add_conditional_edges("llm_move_extract", tools_condition, {"tools": "tools", END: "extract_next_move"})
-    builder.add_conditional_edges("extract_next_move", _route_after_validate, {
+    builder.add_conditional_edges("structured_next_move", _route_after_validate, {
         "prepare_move_retry": "prepare_move_retry",
-        "prepare_message": "prepare_message",
+        "prepare_message": "generate_message",
     })
 
     builder.add_edge("prepare_move_retry", "llm_retry")
-    builder.add_conditional_edges("llm_retry", tools_condition, {"tools": "tools", END: "extract_move_retry"})
-    builder.add_edge("extract_move_retry", "llm_retry_extract")
-
-    builder.add_conditional_edges("llm_retry_extract", tools_condition, {"tools": "tools", END: "extract_retry_move"})
-    builder.add_conditional_edges("extract_retry_move", _route_after_validate, {
+    builder.add_conditional_edges("llm_retry", tools_condition, {"tools": "tools", END: "structured_retry_move"})
+    builder.add_conditional_edges("structured_retry_move", _route_after_validate, {
         "prepare_move_retry": "prepare_move_retry",
-        "prepare_message": "prepare_message",
+        "prepare_message": "generate_message",
     })
 
-    builder.add_edge("prepare_message", "llm_message")
-    builder.add_conditional_edges("llm_message", tools_condition, {"tools": "tools", END: "extract_message"})
-    builder.add_edge("extract_message", END)
+    builder.add_edge("generate_message", END)
 
-    builder.add_conditional_edges("tools", _route_tools_back)
+    builder.add_conditional_edges("tools", _route_move_tools_back)
 
     return builder
 
@@ -541,26 +552,64 @@ async def run_move_workflow(
 ) -> MoveState:
     tool_provider = ToolProvider(game_service=game_svc, game_session_id=game_session_id)
     try:
-        tools = tool_provider.get_tools() + [SCORE_OUTPUT_TOOL, NEXT_MOVE_OUTPUT_TOOL]
-        mw = MoveWorkflow(llm, game_svc, tool_provider, tools=tools)
+        evaluate_tools = tool_provider.get_tools() + [SCORE_OUTPUT_TOOL]
+        instructor_move_tools = tool_provider.get_tools()
+
+        ew = EvaluateWorkflow(llm, game_svc, tool_provider, tools=evaluate_tools)
+        imw = InstructorMoveWorkflow(llm, game_svc, tool_provider, tools=instructor_move_tools)
 
         async with AsyncPostgresStore.from_conn_string(store_uri) as store:
             await store.setup()
-            graph = build_move_workflow(mw).compile(store=store)
 
-            initial = MoveState(
-                fen=fen,
-                move=move,
-                user_id=user_id,
-                username=username,
-                level=level,
-                game_session_id=game_session_id,
-                legal_moves=legal_moves or [],
-                white=white or "student",
-            )
+            eval_graph = build_evaluate_workflow(ew).compile(store=store)
+            eval_result = await asyncio.shield(eval_graph.ainvoke(
+                MoveState(
+                    fen=fen,
+                    move=move,
+                    user_id=user_id,
+                    username=username,
+                    level=level,
+                    game_session_id=game_session_id,
+                    white=white or "student",
+                ),
+                context=MoveContext(game_session_id=game_session_id),
+            ))
 
-            result = await asyncio.shield(graph.ainvoke(initial, context=MoveContext(game_session_id=game_session_id)))
+            eval_state = MoveState(**eval_result)
 
-        return MoveState(**result)
+            move_graph = build_instructor_move_workflow(imw).compile(store=store)
+            move_result = await asyncio.shield(move_graph.ainvoke(
+                MoveState(
+                    fen=eval_state.fen,
+                    move=eval_state.move,
+                    user_id=eval_state.user_id,
+                    username=eval_state.username,
+                    level=eval_state.level,
+                    game_session_id=eval_state.game_session_id,
+                    white=eval_state.white,
+                    legal_moves=eval_state.legal_moves,
+                ),
+                context=MoveContext(game_session_id=game_session_id),
+            ))
+
+            move_state = MoveState(**move_result)
+
+        return MoveState(
+            fen=move_state.fen,
+            move=eval_state.move,
+            user_id=eval_state.user_id,
+            username=eval_state.username,
+            level=eval_state.level,
+            game_session_id=eval_state.game_session_id,
+            white=eval_state.white,
+            commentary=eval_state.commentary,
+            next_move=move_state.next_move,
+            score_delta=eval_state.score_delta,
+            score_reason=eval_state.score_reason,
+            score_grade=eval_state.score_grade,
+            message=move_state.message,
+            legal_moves=move_state.legal_moves,
+            invalid_move=move_state.invalid_move,
+        )
     finally:
         tool_provider.close()

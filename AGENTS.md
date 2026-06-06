@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Always ask before making changes and before taking decisions.
+
 ## Commands
 
 ```bash

@@ -13,6 +13,11 @@ class NextMoveOutput(BaseModel):
         description="The chosen move in Standard Algebraic Notation (SAN), e.g. Nf3, e4, O-O")
 
 
+class MessageOutput(BaseModel):
+    message: str = Field(
+        description="Explanation to the student about why the instructor chose this move, 2-3 sentences")
+
+
 class ScoreOutput(BaseModel):
     grade: Literal["STRONG", "GOOD", "WEAK"] = Field(
         description="Quality grade of the student's move"
@@ -34,6 +39,9 @@ class LLMClient(Protocol):
         ...
 
     def bind_tools(self, tools: list[BaseTool]) -> Runnable:
+        ...
+
+    def with_structured_output(self, schema: type[BaseModel]) -> Runnable:
         ...
 
 

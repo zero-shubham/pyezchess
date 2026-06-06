@@ -28,6 +28,25 @@ class GetLevelDetailsInput(BaseModel):
     )
 
 
+class GetTopMovesInput(BaseModel):
+    fen: str = Field(description="FEN string of the position to analyze")
+    n: int = Field(
+        default=3,
+        description="Number of top moves to return (1-5, defaults to 3)",
+    )
+
+
+@dataclass(frozen=True)
+class TopMove:
+    move: str
+    score: str
+
+
+@dataclass(frozen=True)
+class ToolError:
+    error: str = ""
+
+
 TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "type": "function",
@@ -71,6 +90,21 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "topic": {"type": "string", "description": "Optional topic ID like '1.1', '2.3'"},
                 },
                 "required": ["level"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_top_moves",
+            "description": "Returns the top N best moves for a given FEN position using Stockfish, with evaluation scores.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fen": {"type": "string", "description": "FEN string of the position to analyze"},
+                    "n": {"type": "integer", "description": "Number of top moves to return (1-5, defaults to 3)"},
+                },
+                "required": ["fen"],
             },
         },
     },

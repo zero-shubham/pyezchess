@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from infrastructure.ai.provider import LLMProvider, ProviderType
@@ -12,6 +13,8 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 
+logger = logging.getLogger(__name__)
+
 
 class LangChainLLMAdapter:
     def __init__(self, chat_model: BaseChatModel, structured_method: str | None = None) -> None:
@@ -20,6 +23,12 @@ class LangChainLLMAdapter:
 
     def bind_tools(self, tools: list[BaseTool]) -> Runnable:
         return self._chat_model.bind_tools(tools)
+
+    def with_structured_output(self, schema: type[BaseModel]) -> Runnable:
+        kwargs: dict[str, Any] = {}
+        if self._structured_method is not None:
+            kwargs["method"] = self._structured_method
+        return self._chat_model.with_structured_output(schema, **kwargs)
 
     async def generate_content(
         self, messages: list[dict], tools: list[dict] | None = None
@@ -76,6 +85,8 @@ class LangChainLLMAdapter:
     async def generate_structured(
         self, messages: list[dict], schema: type[BaseModel]
     ) -> Any:
+        logger.info(f"CONTEXT HAS {len(messages)} messages")
+        
         lc_messages = []
         for msg in messages:
             role = msg.get("role", "user")
