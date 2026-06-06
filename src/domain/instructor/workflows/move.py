@@ -187,11 +187,13 @@ class _WorkflowBase:
         except Exception:
             return ""
 
-    def _build_messages(self, system_content: str) -> list[BaseMessage]:
+    def _build_messages(self, system_content: str, *, no_tool: bool = False) -> list[BaseMessage]:
         messages: list[BaseMessage] = []
         system = self._system_prompt()
         if system:
             messages.append(SystemMessage(content=system))
+        if no_tool:
+            system_content = system_content.rstrip() + "\n\nNO_TOOL"
         messages.append(SystemMessage(content=system_content))
         return messages
 
@@ -253,7 +255,7 @@ class EvaluateWorkflow(_WorkflowBase):
             init_score="N/A", post_score="N/A",
             analysis=raw_text,
         )
-        messages = self._build_messages(prompt)
+        messages = self._build_messages(prompt, no_tool=True)
         result = await self._llm_structured_score.ainvoke(messages)
         grade = result.grade if result else "GOOD"
         delta = result.delta if result else 1
@@ -350,7 +352,7 @@ class InstructorMoveWorkflow(_WorkflowBase):
             fen=state.fen, move=state.move,
             vishy_color=vishy_color, student_color=student_color,
             analysis=raw_text)
-        messages = self._build_messages(prompt)
+        messages = self._build_messages(prompt, no_tool=True)
         result = await self._llm_structured_move.ainvoke(messages)
         next_move = result.move if result else ""
         logger.info("structured_next_move: move=%s", next_move)
@@ -380,7 +382,7 @@ class InstructorMoveWorkflow(_WorkflowBase):
             legal_moves=", ".join(state.legal_moves),
             invalid_move=invalid_move, analysis=raw_text,
             vishy_color=vishy_color, student_color=student_color)
-        messages = self._build_messages(prompt)
+        messages = self._build_messages(prompt, no_tool=True)
         result = await self._llm_structured_move.ainvoke(messages)
         next_move = result.move if result else ""
         logger.info("structured_retry_move: move=%s", next_move)
@@ -389,7 +391,7 @@ class InstructorMoveWorkflow(_WorkflowBase):
     async def _generate_message(self, state: MoveState) -> dict:
         prompt = MESSAGE_PROMPT.format(
             fen=state.fen, move=state.move, next_move=state.next_move)
-        messages = self._build_messages(prompt)
+        messages = self._build_messages(prompt, no_tool=True)
         result = await self._llm_structured_message.ainvoke(messages)
         message = result.message if result else ""
         if state.game_session_id and state.next_move:

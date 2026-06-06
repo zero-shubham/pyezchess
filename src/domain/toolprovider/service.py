@@ -113,6 +113,7 @@ class ToolProvider:
                 }
                 for e in filtered
             ]
+            logger.info(f"get_session_history executed - limit: {limit} event_type: {event_type}")
             return {"events": history}
         except Exception as e:
             return {"events": [], "error": str(e)}
