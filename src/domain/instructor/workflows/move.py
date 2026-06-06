@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-import json
 import logging
 import asyncio
 from dataclasses import dataclass, field
 from typing import Annotated, Protocol, runtime_checkable
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from chess import Board
 from langchain_core.messages import BaseMessage, SystemMessage
-from langchain_core.tools import BaseTool, StructuredTool
+from langchain_core.tools import BaseTool
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.runtime import Runtime
-from langgraph.store.postgres.aio import AsyncPostgresStore
+
 
 from domain.game.model import Event, EventRole, EventType
 from domain.instructor.model import LLMClient, MessageOutput, NextMoveOutput, ScoreOutput, ToolExecutor
@@ -118,6 +117,20 @@ Grade the student's move based on the evaluation above. Be generous with beginne
 
 If required, use the get_session_history tool to retrieve past events from this game session for additional context."""
 
+SCORE_EXTRACT_PROMPT = """Workflow: move, step: compute_score (extraction)
+
+FEN (before student move): {fen}
+Student move: {move}
+
+Stockfish evaluation for this move:
+- Initial score (before move): {init_score}
+- Post score (after move): {post_score}
+
+Analysis results:
+{analysis}
+
+Grade the student's move based on the evaluation above. Be generous with beginners — err toward GOOD or STRONG when the student shows sound reasoning even if the computer prefers a different move."""
+
 MESSAGE_PROMPT = """Workflow: move, step: compute_message
 
 FEN (after student move): {fen}
@@ -152,12 +165,7 @@ Position analysis results:
 
 Previous move "{invalid_move}" was invalid. Choose the best move from the legal moves list based on the evaluation data."""
 
-SCORE_OUTPUT_TOOL = StructuredTool.from_function(
-    func=lambda grade, delta, reason: json.dumps({"grade": grade, "delta": delta, "reason": reason}),
-    name="ScoreOutput",
-    description="Output the score assessment for the student's move",
-    args_schema=ScoreOutput,
-)
+
 
 
 def _player_colors(white: str) -> tuple[str, str]:
@@ -188,14 +196,6 @@ class _WorkflowBase:
         return messages
 
     @staticmethod
-    def _parse_structured_tool(message: BaseMessage) -> dict:
-        content = str(message.content or "")
-        try:
-            return json.loads(content)
-        except (json.JSONDecodeError, TypeError):
-            return {}
-
-    @staticmethod
     def _last_message_content(state) -> str:
         if state.messages:
             return str(getattr(state.messages[-1], "content", "") or "")
@@ -214,6 +214,7 @@ class EvaluateWorkflow(_WorkflowBase):
         super().__init__(llm, tools)
         self._game_svc = game_svc
         self._tool_executor = tool_executor
+        self._llm_structured_score = llm.with_structured_output(ScoreOutput)
 
     async def _prepare_score(self, state: MoveState, runtime: Runtime[MoveContext]) -> dict:
         board = self._game_svc.board
@@ -243,18 +244,21 @@ class EvaluateWorkflow(_WorkflowBase):
             "_pre_fen": pre_fen,
         }
 
-    async def _extract_score(self, state: MoveState, runtime: Runtime[MoveContext]) -> dict:
+    async def _structured_score(self, state: MoveState, runtime: Runtime[MoveContext]) -> dict:
         board = self._game_svc.board
 
-        grade = "GOOD"
-        delta = 1
-        reason = ""
-        if state.messages:
-            parsed = self._parse_structured_tool(state.messages[-1])
-            grade = parsed.get("grade", "GOOD")
-            delta = int(parsed.get("delta", 1))
-            reason = parsed.get("reason", "")
-            logger.info("extract_score: grade=%s delta=%d reason=%s", grade, delta, reason)
+        raw_text = self._last_message_content(state).strip()
+        prompt = SCORE_EXTRACT_PROMPT.format(
+            fen=state._pre_fen, move=state.move,
+            init_score="N/A", post_score="N/A",
+            analysis=raw_text,
+        )
+        messages = self._build_messages(prompt)
+        result = await self._llm_structured_score.ainvoke(messages)
+        grade = result.grade if result else "GOOD"
+        delta = result.delta if result else 1
+        reason = result.reason if result else ""
+        logger.info("structured_score: grade=%s delta=%d reason=%s", grade, delta, reason)
 
         try:
             move_obj = board.parse_san(state.move)
@@ -283,18 +287,6 @@ class EvaluateWorkflow(_WorkflowBase):
         except Exception:
             logger.exception("failed to record student move event")
 
-        if runtime and runtime.store:
-            try:
-                namespace = ("games", runtime.context.game_session_id)
-                summary = f"Move {state.move}: {grade} - {reason}"
-                await runtime.store.aput(
-                    namespace, str(uuid4()),
-                    {"summary": summary, "move": state.move,
-                     "grade": grade, "delta": delta, "reason": reason},
-                )
-            except Exception:
-                logger.exception("failed to store game memory")
-
         return {
             "fen": post_fen,
             "legal_moves": legal_moves,
@@ -309,17 +301,6 @@ class EvaluateWorkflow(_WorkflowBase):
             grade=state.score_grade, delta=state.score_delta,
             reason=state.score_reason,
         )
-        if runtime and runtime.store:
-            try:
-                namespace = ("games", runtime.context.game_session_id)
-                memories = await runtime.store.asearch(namespace, query=state.move, limit=5)
-                past_summaries = "\n".join(
-                    m.value.get("summary", "") for m in memories if m.value.get("summary")
-                )
-                if past_summaries:
-                    prompt += f"\n\nContext from previous moves in this game:\n{past_summaries}"
-            except Exception:
-                logger.exception("failed to search game memories for commentary")
 
         return {
             "messages": self._build_messages(prompt),
@@ -436,12 +417,6 @@ class InstructorMoveWorkflow(_WorkflowBase):
 
 
 def _route_evaluate_tools_back(state: MoveState) -> str:
-    for msg in reversed(state.messages):
-        if not hasattr(msg, "name"):
-            break
-        if msg.name == "ScoreOutput":
-            return "extract_score"
-
     mapping = {
         "score": "llm_score",
         "commentary": "llm_commentary",
@@ -471,7 +446,7 @@ def build_evaluate_workflow(ew: EvaluateWorkflow) -> StateGraph:
     builder.add_node("start", lambda state: {})
 
     builder.add_node("prepare_score", ew._prepare_score)
-    builder.add_node("extract_score", ew._extract_score)
+    builder.add_node("structured_score", ew._structured_score)
     builder.add_node("prepare_commentary", ew._prepare_commentary)
     builder.add_node("extract_commentary", ew._extract_commentary)
 
@@ -484,8 +459,8 @@ def build_evaluate_workflow(ew: EvaluateWorkflow) -> StateGraph:
     builder.add_edge("start", "prepare_score")
 
     builder.add_edge("prepare_score", "llm_score")
-    builder.add_conditional_edges("llm_score", tools_condition, {"tools": "tools", END: "extract_score"})
-    builder.add_edge("extract_score", "prepare_commentary")
+    builder.add_conditional_edges("llm_score", tools_condition, {"tools": "tools", END: "structured_score"})
+    builder.add_edge("structured_score", "prepare_commentary")
 
     builder.add_edge("prepare_commentary", "llm_commentary")
     builder.add_conditional_edges("llm_commentary", tools_condition, {"tools": "tools", END: "extract_commentary"})
@@ -546,53 +521,49 @@ async def run_move_workflow(
     game_session_id: str,
     llm: LLMClient,
     game_svc: GameSvcProto,
-    store_uri: str,
     legal_moves: list[str] | None = None,
     white: str | None = None,
 ) -> MoveState:
     tool_provider = ToolProvider(game_service=game_svc, game_session_id=game_session_id)
     try:
-        evaluate_tools = tool_provider.get_tools() + [SCORE_OUTPUT_TOOL]
+        evaluate_tools = tool_provider.get_tools()
         instructor_move_tools = tool_provider.get_tools()
 
         ew = EvaluateWorkflow(llm, game_svc, tool_provider, tools=evaluate_tools)
         imw = InstructorMoveWorkflow(llm, game_svc, tool_provider, tools=instructor_move_tools)
 
-        async with AsyncPostgresStore.from_conn_string(store_uri) as store:
-            await store.setup()
+        eval_graph = build_evaluate_workflow(ew).compile()
+        eval_result = await asyncio.shield(eval_graph.ainvoke(
+            MoveState(
+                fen=fen,
+                move=move,
+                user_id=user_id,
+                username=username,
+                level=level,
+                game_session_id=game_session_id,
+                white=white or "student",
+            ),
+            context=MoveContext(game_session_id=game_session_id),
+        ))
 
-            eval_graph = build_evaluate_workflow(ew).compile(store=store)
-            eval_result = await asyncio.shield(eval_graph.ainvoke(
-                MoveState(
-                    fen=fen,
-                    move=move,
-                    user_id=user_id,
-                    username=username,
-                    level=level,
-                    game_session_id=game_session_id,
-                    white=white or "student",
-                ),
-                context=MoveContext(game_session_id=game_session_id),
-            ))
+        eval_state = MoveState(**eval_result)
 
-            eval_state = MoveState(**eval_result)
+        move_graph = build_instructor_move_workflow(imw).compile()
+        move_result = await asyncio.shield(move_graph.ainvoke(
+            MoveState(
+                fen=eval_state.fen,
+                move=eval_state.move,
+                user_id=eval_state.user_id,
+                username=eval_state.username,
+                level=eval_state.level,
+                game_session_id=eval_state.game_session_id,
+                white=eval_state.white,
+                legal_moves=eval_state.legal_moves,
+            ),
+            context=MoveContext(game_session_id=game_session_id),
+        ))
 
-            move_graph = build_instructor_move_workflow(imw).compile(store=store)
-            move_result = await asyncio.shield(move_graph.ainvoke(
-                MoveState(
-                    fen=eval_state.fen,
-                    move=eval_state.move,
-                    user_id=eval_state.user_id,
-                    username=eval_state.username,
-                    level=eval_state.level,
-                    game_session_id=eval_state.game_session_id,
-                    white=eval_state.white,
-                    legal_moves=eval_state.legal_moves,
-                ),
-                context=MoveContext(game_session_id=game_session_id),
-            ))
-
-            move_state = MoveState(**move_result)
+        move_state = MoveState(**move_result)
 
         return MoveState(
             fen=move_state.fen,

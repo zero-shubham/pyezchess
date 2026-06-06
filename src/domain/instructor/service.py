@@ -15,14 +15,12 @@ class LangGraphInstructor(Instructor):
     def __init__(
         self,
         llm: LLMClient,
-        store_uri: str,
         system_prompt: str = "",
         user_id: str = "",
     ):
         self._llm = llm
         self._system_prompt = system_prompt
         self._user_id = user_id
-        self._store_uri = store_uri
 
     async def begin_game(self, game_svc: Any, user_id: str, username: str, level: int) -> ExplainResult:
         result = await run_progress_check(
@@ -55,7 +53,6 @@ class LangGraphInstructor(Instructor):
             llm=self._llm,
             game_svc=game_svc,
             legal_moves=legal_moves,
-            store_uri=self._store_uri,
             white=white,
         )
 

@@ -66,11 +66,8 @@ async def game_websocket(
     llm = create_llm_client(LLMProvider(
         type=ProviderType.DEEPSEEK, api_key=settings.deepseek_api_key, model=settings.deepseek_model))
 
-    store_uri = settings.database_url.replace("+asyncpg", "")
-
     instructor = LangGraphInstructor(
         llm=llm,
-        store_uri=store_uri,
         system_prompt=prompt_getter.main_prompt(),
         user_id=str(user_id),
     )

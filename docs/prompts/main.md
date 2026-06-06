@@ -248,7 +248,7 @@ All three tools are information-retrieval only. Your text responses communicate 
 
 | Tool | Purpose | Parameters |
 | ---- | ------- | ---------- |
-| `get_session_history` | Recent session activity and events | `limit` (int, required), `event_type` (string, optional, default `"move"`) |
+| `get_session_history` | Recent session activity and events | `limit` (int, required), `event_type` (enum string [move, explain, move_result, hint, start_game], optional, default `"move"`) |
 | `evaluate_move` | Stockfish analysis: returns pre-move and post-move scores for a given FEN and SAN move | `fen` (string, required), `san_move` (string, required) |
 | `get_level_details` | Curriculum content for a level, or a specific topic within a level | `level` (int 1-4, required), `topic` (string, optional e.g. `"1.1"`) |
 
