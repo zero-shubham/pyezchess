@@ -1,0 +1,81 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+
+class EvaluateMoveInput(BaseModel):
+    fen: str = Field(description="FEN string of the position before the move")
+    san_move: str = Field(
+        description="Move in SAN notation, e.g. 'e4', 'Nf3', 'O-O'"
+    )
+
+
+class GetSessionHistoryInput(BaseModel):
+    limit: int = Field(description="Number of recent events to return")
+    event_type: str = Field(
+        default="move",
+        description="Filter by event type: move, hint, explain, move_result, start_game. Defaults to 'move'.",
+    )
+
+
+class GetLevelDetailsInput(BaseModel):
+    level: int = Field(description="Level number (1-4)")
+    topic: str = Field(
+        default="", description="Optional topic ID like '1.1', '2.3'"
+    )
+
+
+TOOL_SCHEMAS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_session_history",
+            "description": "Returns recent session activity and events",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Number of recent events to return"},
+                    "event_type": {"type": "string", "description": "Filter by event type: move, hint, explain, move_result, start_game. Defaults to 'move'."},
+                },
+                "required": ["limit"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "evaluate_move",
+            "description": "Evaluates a chess move using Stockfish. Returns pre-move and post-move scores (centipawn or mate depth) for a given FEN position and a SAN move.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fen": {"type": "string", "description": "FEN string of the position before the move"},
+                    "san_move": {"type": "string", "description": "Move in SAN notation, e.g. 'e4', 'Nf3', 'O-O'"},
+                },
+                "required": ["fen", "san_move"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_level_details",
+            "description": "Returns curriculum details for a level, or a specific topic within a level",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "level": {"type": "integer", "description": "Level number (1-4)"},
+                    "topic": {"type": "string", "description": "Optional topic ID like '1.1', '2.3'"},
+                },
+                "required": ["level"],
+            },
+        },
+    },
+]
+
+
+def get_tool_definitions() -> list[dict[str, Any]]:
+    return TOOL_SCHEMAS
