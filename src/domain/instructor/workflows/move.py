@@ -8,7 +8,7 @@ from typing import Annotated, Protocol, runtime_checkable
 from uuid import UUID
 
 from chess import Board
-from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -184,27 +184,15 @@ class _WorkflowBase:
         self._tools = tools
         self._llm_with_tools = llm.bind_tools(self._tools)
 
-    @staticmethod
-    def _system_prompt() -> str:
-        try:
-            return PromptGetter().main_prompt()
-        except Exception:
-            return ""
-
-    def _build_messages(self, system_content: str, *, no_tool: bool = False) -> list[BaseMessage]:
-        messages: list[BaseMessage] = []
-        system = self._system_prompt()
-        if system:
-            messages.append(SystemMessage(content=system))
+    def _build_messages(self, content: str, *, no_tool: bool = False) -> list[BaseMessage]:
         if no_tool:
-            system_content = system_content.rstrip() + "\n\nNO_TOOL"
-        messages.append(SystemMessage(content=system_content))
-        return messages
+            content = content.rstrip() + "\n\nNO_TOOL"
+        return [HumanMessage(content=content)]
 
     @staticmethod
     def _last_message_content(state) -> str:
         if state.messages:
-            return str(getattr(state.messages[-1], "content", "") or "")
+            return str(getattr(state.messages[-1], "text", "") or "")
         return ""
 
     def _make_llm_node(self, step: str):
@@ -446,10 +434,17 @@ def _route_after_validate(state: MoveState) -> str:
     return "prepare_message"
 
 
+def _inject_system_prompt(state: MoveState) -> dict:
+    prompt = PromptGetter().main_prompt()
+    if prompt:
+        return {"messages": [SystemMessage(content=prompt)]}
+    return {}
+
+
 def build_evaluate_workflow(ew: EvaluateWorkflow) -> StateGraph[MoveState, MoveContext, MoveState, MoveState]:
     builder = StateGraph(MoveState, context_schema=MoveContext)
 
-    builder.add_node("start", lambda state: {})
+    builder.add_node("start", _inject_system_prompt)
 
     builder.add_node("prepare_score", ew._prepare_score)
     builder.add_node("structured_score", ew._structured_score)
@@ -480,7 +475,7 @@ def build_evaluate_workflow(ew: EvaluateWorkflow) -> StateGraph[MoveState, MoveC
 def build_instructor_move_workflow(imw: InstructorMoveWorkflow) -> StateGraph[MoveState, MoveContext, MoveState, MoveState]:
     builder = StateGraph(MoveState, context_schema=MoveContext)
 
-    builder.add_node("start", lambda state: {})
+    builder.add_node("start", _inject_system_prompt)
 
     builder.add_node("prepare_move_analysis", imw._prepare_move_analysis)
     builder.add_node("structured_next_move", imw._structured_next_move)

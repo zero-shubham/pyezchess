@@ -8,6 +8,7 @@ from infrastructure.ai.provider import LLMProvider, ProviderType
 from pydantic import BaseModel, SecretStr
 
 from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.runnables import Runnable
@@ -47,5 +48,17 @@ def create_llm_client(provider: LLMProvider) -> LLMWrapper:
             base_url="https://api.deepseek.com/v1",
         )
         return LLMWrapper(chat_model, structured_method="function_calling")
+    elif provider.type == ProviderType.GEMINI:
+        chat_model = ChatGoogleGenerativeAI(
+            model=provider.model or "gemini-2.5-flash",
+            api_key=provider.api_key,
+        )
+        return LLMWrapper(chat_model, structured_method="json_schema")
+    elif provider.type == ProviderType.OPENAI:
+        chat_model = ChatOpenAI(
+            model=provider.model or "gpt-4.1",
+            api_key=lambda: provider.api_key,
+        )
+        return LLMWrapper(chat_model)
     else:
         raise ValueError(f"unsupported provider: {provider.type}")

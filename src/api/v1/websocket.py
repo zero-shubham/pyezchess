@@ -5,14 +5,14 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Cookie, WebSocket, WebSocketDisconnect
 
-from configs.config import settings
+from configs.config import get_available_provider_and_key, settings
 from domain.game.model import GameSessionStatus
 from domain.game.service import GameService
 from domain.game.session_manager import SessionEntry
 from domain.instructor.service import LangGraphInstructor
 from domain.instructor.prompt import PromptGetter
 from infrastructure.ai.factory import create_llm_client
-from infrastructure.ai.provider import LLMProvider, ProviderType
+from infrastructure.ai.provider import LLMProvider
 from infrastructure.middleware.session import hash_token
 from infrastructure.persistence.database import async_session_factory
 from infrastructure.persistence.postgres.session_repository import PostgresSessionRepository
@@ -63,8 +63,9 @@ async def game_websocket(
     msg_manager = WebsocketMsgManager(websocket, game_service)
     game_service.set_msg_manager(msg_manager)
 
+    provider_type, api_key, model = get_available_provider_and_key()
     llm = create_llm_client(LLMProvider(
-        type=ProviderType.DEEPSEEK, api_key=settings.deepseek_api_key, model=settings.deepseek_model))
+        type=provider_type, api_key=api_key, model=model))
 
     instructor = LangGraphInstructor(
         llm=llm,

@@ -70,22 +70,10 @@ class QueryWorkflow:
         self._tools = tools
         self._llm_with_tools = llm.bind_tools(list(self._tools))
 
-    @staticmethod
-    def _system_prompt() -> str:
-        try:
-            return PromptGetter().main_prompt()
-        except Exception:
-            return ""
-
     def _build_messages(self, system_content: str, *, no_tool: bool = False) -> list[BaseMessage]:
-        messages: list[BaseMessage] = []
-        system = self._system_prompt()
-        if system:
-            messages.append(SystemMessage(content=system))
         if no_tool:
             system_content = system_content.rstrip() + "\n\nNO_TOOL"
-        messages.append(SystemMessage(content=system_content))
-        return messages
+        return [HumanMessage(content=system_content)]
 
     async def _prepare_query(self, state: QueryState) -> dict:
         vishy_color, student_color = _player_colors(state.white)
@@ -104,9 +92,6 @@ class QueryWorkflow:
             student_color=student_color,
         )
         messages: list[BaseMessage] = []
-        system = self._system_prompt()
-        if system:
-            messages.append(SystemMessage(content=system))
         if events:
             for e in reversed(events):
                 role = "Vishy" if e.role == EventRole.INSTRUCTOR else "Student"
@@ -117,7 +102,7 @@ class QueryWorkflow:
 
     async def _extract_explanation(self, state: QueryState) -> dict:
         if state.messages:
-            last_msg = str(getattr(state.messages[-1], "content", "") or "")
+            last_msg = str(getattr(state.messages[-1], "text", "") or "")
         else:
             last_msg = ""
 
@@ -160,10 +145,17 @@ def _route_tools_back(state: QueryState) -> str:
     return mapping.get(state._current_step, END)
 
 
+def _inject_system_prompt(state: QueryState) -> dict:
+    prompt = PromptGetter().main_prompt()
+    if prompt:
+        return {"messages": [SystemMessage(content=prompt)]}
+    return {}
+
+
 def build_query_workflow(qw: QueryWorkflow) -> StateGraph:
     builder = StateGraph(QueryState)
 
-    builder.add_node("start", lambda state: {})
+    builder.add_node("start", _inject_system_prompt)
     builder.add_node("prepare_query", qw._prepare_query)
     builder.add_node("llm_query", qw._make_llm_node("query"))
     builder.add_node("extract_explanation", qw._extract_explanation)

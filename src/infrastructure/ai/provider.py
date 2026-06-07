@@ -8,6 +8,8 @@ from typing import Any
 class ProviderType(StrEnum):
     CLAUDE = "claude"
     DEEPSEEK = "deepseek"
+    GEMINI = "gemini"
+    OPENAI = "openai"
 
 
 @dataclass

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol
 from uuid import UUID
 
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables import Runnable
 from langgraph.graph import StateGraph, END
 
@@ -231,7 +231,7 @@ class UserProgressWorkflow:
         legal_moves = board.get_legal_moves_san()
         prompt = INSTRUCTOR_OPENING_PROMPT.format(
             fen=fen, legal_moves=", ".join(legal_moves))
-        messages = [SystemMessage(content=prompt)]
+        messages: list = [HumanMessage(content=prompt)]
         instructor_move = ""
 
         try:
