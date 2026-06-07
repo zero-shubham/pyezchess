@@ -4,9 +4,10 @@ import logging
 from typing import Any
 
 from domain.instructor.interface import Instructor
-from domain.instructor.model import ExplainResult, LLMClient, MovePlayedResult
+from domain.instructor.model import ExplainResult, LLMClient, MovePlayedResult, QueryResult
 from domain.instructor.workflows.move import run_move_workflow
 from domain.instructor.workflows.progress import run_progress_check
+from domain.instructor.workflows.query import run_query_workflow
 
 logger = logging.getLogger(__name__)
 
@@ -67,3 +68,19 @@ class LangGraphInstructor(Instructor):
             is_best=result.score_grade == "STRONG",
             commentary=result.commentary,
         )
+
+    async def handle_query(self, game_svc: Any, query: str, game_session_id: str,
+                           user_id: str, username: str, level: int,
+                           fen: str, white: str) -> QueryResult:
+        result = await run_query_workflow(
+            query=query,
+            game_session_id=game_session_id,
+            user_id=user_id,
+            username=username,
+            level=level,
+            fen=fen,
+            white=white,
+            llm=self._llm,
+            game_svc=game_svc,
+        )
+        return QueryResult(explanation=result.explanation)

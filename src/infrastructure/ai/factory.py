@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from typing import Any
 
 from infrastructure.ai.provider import LLMProvider, ProviderType
@@ -20,7 +21,7 @@ class LLMWrapper:
         self._chat_model = chat_model
         self._structured_method = structured_method
 
-    def bind_tools(self, tools: list[BaseTool]) -> Runnable:
+    def bind_tools(self, tools: Sequence[BaseTool]) -> Runnable:
         return self._chat_model.bind_tools(tools)
 
     def with_structured_output(self, schema: type[BaseModel]) -> Runnable:

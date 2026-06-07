@@ -32,6 +32,7 @@ class EventType(StrEnum):
     EXPLAIN = "explain"
     MOVE_RESULT = "move_result"
     START_GAME = "start_game"
+    QUERY = "query"
 
 
 @dataclass

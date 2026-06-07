@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import asyncio
 from dataclasses import dataclass, field
+from collections.abc import Sequence
 from typing import Annotated, Protocol, runtime_checkable
 from uuid import UUID
 
@@ -62,6 +63,8 @@ class GameSvcProto(Protocol):
     board: EzBoard
     async def add_event(self, event: Event) -> Event: ...
     async def persist_fen(self, game_session_id: UUID, fen: str) -> None: ...
+    async def get_events(self, session_id: UUID, event_types: list[str], limit: int = 100) -> list[Event]: ...
+    def get_fen(self) -> str: ...
 
 
 COMMENTARY_PROMPT = """Workflow: move, step: compute_commentary
@@ -176,7 +179,7 @@ def _player_colors(white: str) -> tuple[str, str]:
 
 
 class _WorkflowBase:
-    def __init__(self, llm: LLMClient, tools: list[BaseTool]) -> None:
+    def __init__(self, llm: LLMClient, tools: Sequence[BaseTool]) -> None:
         self._llm = llm
         self._tools = tools
         self._llm_with_tools = llm.bind_tools(self._tools)
@@ -213,7 +216,7 @@ class _WorkflowBase:
 
 
 class EvaluateWorkflow(_WorkflowBase):
-    def __init__(self, llm: LLMClient, game_svc: GameSvcProto, tool_executor: ToolExecutor, tools: list[BaseTool]) -> None:
+    def __init__(self, llm: LLMClient, game_svc: GameSvcProto, tool_executor: ToolExecutor, tools: Sequence[BaseTool]) -> None:
         super().__init__(llm, tools)
         self._game_svc = game_svc
         self._tool_executor = tool_executor
@@ -315,7 +318,7 @@ class EvaluateWorkflow(_WorkflowBase):
 
 
 class InstructorMoveWorkflow(_WorkflowBase):
-    def __init__(self, llm: LLMClient, game_svc: GameSvcProto, tool_provider: ToolProvider, tools: list[BaseTool]) -> None:
+    def __init__(self, llm: LLMClient, game_svc: GameSvcProto, tool_provider: ToolProvider, tools: Sequence[BaseTool]) -> None:
         super().__init__(llm, tools)
         self._game_svc = game_svc
         self._tool_provider = tool_provider
@@ -443,7 +446,7 @@ def _route_after_validate(state: MoveState) -> str:
     return "prepare_message"
 
 
-def build_evaluate_workflow(ew: EvaluateWorkflow) -> StateGraph:
+def build_evaluate_workflow(ew: EvaluateWorkflow) -> StateGraph[MoveState, MoveContext, MoveState, MoveState]:
     builder = StateGraph(MoveState, context_schema=MoveContext)
 
     builder.add_node("start", lambda state: {})
@@ -474,7 +477,7 @@ def build_evaluate_workflow(ew: EvaluateWorkflow) -> StateGraph:
     return builder
 
 
-def build_instructor_move_workflow(imw: InstructorMoveWorkflow) -> StateGraph:
+def build_instructor_move_workflow(imw: InstructorMoveWorkflow) -> StateGraph[MoveState, MoveContext, MoveState, MoveState]:
     builder = StateGraph(MoveState, context_schema=MoveContext)
 
     builder.add_node("start", lambda state: {})

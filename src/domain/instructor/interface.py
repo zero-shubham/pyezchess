@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from domain.instructor.model import ExplainResult, MovePlayedResult
+from domain.instructor.model import ExplainResult, MovePlayedResult, QueryResult
 
 
 class Instructor(ABC):
@@ -15,3 +15,8 @@ class Instructor(ABC):
                           user_id: str, username: str, level: int,
                           legal_moves: list[str] | None = None,
                           white: str | None = None) -> MovePlayedResult: ...
+
+    @abstractmethod
+    async def handle_query(self, game_svc: Any, query: str, game_session_id: str,
+                           user_id: str, username: str, level: int,
+                           fen: str, white: str) -> QueryResult: ...

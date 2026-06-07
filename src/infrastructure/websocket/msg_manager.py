@@ -47,6 +47,7 @@ class WebsocketMsgManager:
 
         self._handlers[WSMessageSubtype.ERROR] = self._handle_error
         self._handlers[WSMessageSubtype.MOVE] = self._handle_move
+        self._handlers[WSMessageSubtype.QUERY] = self._handle_query
 
     async def send_message(self, msg: WSMessage) -> None:
         if self._ws.client_state == WebSocketState.CONNECTED:
@@ -146,3 +147,36 @@ class WebsocketMsgManager:
         except Exception:
             logger.exception("failed to handle move")
             await self.send_notification(WSMessageSubtype.ERROR, "failed to process move")
+
+    async def _handle_query(self, data: dict) -> None:
+        payload = data.get("payload", {})
+        query = str(payload.get("query", ""))
+        fen = str(payload.get("fen", ""))
+
+        if not query:
+            await self.send_notification(WSMessageSubtype.ERROR, "query is required")
+            return
+
+        if not self._game_session_id:
+            await self.send_notification(WSMessageSubtype.ERROR, "no active game session")
+            return
+
+        try:
+            result = await self._game_service.handle_query(
+                user_id=self._ctx_user_id,
+                username=self._ctx_username,
+                level=self._ctx_level,
+                query=query,
+                fen=fen or self._initial_fen,
+                game_session_id=str(self._game_session_id),
+            )
+
+            if result.explanation:
+                await self.send_message(WSMessage(
+                    type=WSMessageType.GAME,
+                    subtype=WSMessageSubtype.EXPLAIN,
+                    payload={"message": result.explanation},
+                ))
+        except Exception:
+            logger.exception("failed to handle query")
+            await self.send_notification(WSMessageSubtype.ERROR, "failed to process query")

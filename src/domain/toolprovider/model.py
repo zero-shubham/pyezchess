@@ -15,9 +15,9 @@ class EvaluateMoveInput(BaseModel):
 
 class GetSessionHistoryInput(BaseModel):
     limit: int = Field(description="Number of recent events to return")
-    event_type: str = Field(
-        default="move",
-        description="Filter by event type: move, hint, explain, move_result, start_game. Defaults to 'move'.",
+    event_types: list[str] = Field(
+        default=["move"],
+        description="Filter by event types: move, hint, explain, move_result, start_game, query. Defaults to ['move'].",
     )
 
 
@@ -34,6 +34,11 @@ class GetTopMovesInput(BaseModel):
         default=3,
         description="Number of top moves to return (1-5, defaults to 3)",
     )
+
+
+class GetCurrentFenInput(BaseModel):
+    """No parameters needed — returns the current board FEN."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -57,7 +62,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {
                     "limit": {"type": "integer", "description": "Number of recent events to return"},
-                    "event_type": {"type": "string", "description": "Filter by event type: move, hint, explain, move_result, start_game. Defaults to 'move'."},
+                    "event_types": {"type": "array", "items": {"type": "string"}, "description": "Filter by event types: move, hint, explain, move_result, start_game, query. Defaults to ['move']."},
                 },
                 "required": ["limit"],
             },
@@ -105,6 +110,18 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "n": {"type": "integer", "description": "Number of top moves to return (1-5, defaults to 3)"},
                 },
                 "required": ["fen"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_current_fen",
+            "description": "Returns the current board position as a FEN string. Use this to get the latest board status before calling other tools that need a FEN.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
             },
         },
     },

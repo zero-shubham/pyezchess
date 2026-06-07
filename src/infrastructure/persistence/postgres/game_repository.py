@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from uuid import UUID
+from typing import List
 
 from sqlalchemy import select, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -142,10 +143,11 @@ class PostgresGameRepository(GameRepository):
         await self._db.flush()
         return self._event_to_domain(m)
 
-    async def get_events_by_session(self, session_id: UUID, limit: int = 100) -> list[Event]:
+    async def get_events_by_session(self, session_id: UUID, event_types: List[str], limit: int = 100) -> list[Event]:
         stmt = (
             select(GameSessionEventModel)
             .where(GameSessionEventModel.game_session_id == session_id)
+            .where(GameSessionEventModel.event_type.in_(event_types))
             .order_by(GameSessionEventModel.created_at.desc())
             .limit(limit)
         )
@@ -202,7 +204,8 @@ class PostgresGameRepository(GameRepository):
         return self._progress_to_domain(m) if m else None
 
     async def get_all_progress(self, user_id: UUID) -> list[UserProgress]:
-        stmt = select(UserProgressModel).where(UserProgressModel.user_id == user_id)
+        stmt = select(UserProgressModel).where(
+            UserProgressModel.user_id == user_id)
         result = await self._db.execute(stmt)
         return [self._progress_to_domain(m) for m in result.scalars().all()]
 
@@ -217,7 +220,8 @@ class PostgresGameRepository(GameRepository):
         return [self._session_to_domain(m) for m in result.scalars().all()]
 
     async def delete_session(self, session_id: UUID) -> None:
-        stmt = delete(GameSessionModel).where(GameSessionModel.id == session_id)
+        stmt = delete(GameSessionModel).where(
+            GameSessionModel.id == session_id)
         await self._db.execute(stmt)
         await self._db.flush()
 

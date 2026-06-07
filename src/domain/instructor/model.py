@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from collections.abc import Sequence
 from typing import Any, Protocol, runtime_checkable, Literal
 
 from pydantic import BaseModel, Field
@@ -32,7 +33,7 @@ class ScoreOutput(BaseModel):
 
 @runtime_checkable
 class LLMClient(Protocol):
-    def bind_tools(self, tools: list[BaseTool]) -> Runnable:
+    def bind_tools(self, tools: Sequence[BaseTool]) -> Runnable:
         ...
 
     def with_structured_output(self, schema: type[BaseModel]) -> Runnable:
@@ -76,6 +77,11 @@ class ExplainResult:
 @dataclass
 class HintResult:
     hint: str = ""
+
+
+@dataclass
+class QueryResult:
+    explanation: str = ""
 
 
 class ToolExecutor(Protocol):

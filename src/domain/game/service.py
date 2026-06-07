@@ -6,6 +6,7 @@ import json
 import logging
 from collections.abc import Callable
 from uuid import UUID
+from typing import List
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -13,7 +14,7 @@ from domain.game.board import EzBoard
 from domain.game.model import GameMetadata, GameSession, Level, UserProgress, Event, EventRole, EventType
 from domain.game.session_manager import SessionEntry, SessionManager
 from domain.instructor.interface import Instructor
-from domain.instructor.model import ExplainResult, MovePlayedResult, MOVE_SIDE
+from domain.instructor.model import ExplainResult, MovePlayedResult, MOVE_SIDE, QueryResult
 from infrastructure.persistence.postgres.game_repository import PostgresGameRepository
 from infrastructure.persistence.unit_of_work import UnitOfWork
 from protocol.message import MessageSender, WSMessage, WSMessageType, WSMessageSubtype
@@ -57,7 +58,7 @@ class GameService:
         if not self.board:
             return
         captured_state = self.board.captured
-        
+
         try:
             if self._msg_manager:
                 await self._msg_manager.send_message(WSMessage(
@@ -65,7 +66,7 @@ class GameService:
                     subtype=WSMessageSubtype.CAPTURED,
                     payload=captured_state,
                 ))
-                
+
             async with UnitOfWork(self._session_factory) as uow:
                 repo = PostgresGameRepository(uow.session)
                 session = await repo.get_session(game_session_id)
@@ -209,6 +210,23 @@ class GameService:
 
         return result
 
+    async def handle_query(self, user_id: str, username: str, level: int,
+                           query: str, fen: str, game_session_id: str) -> QueryResult:
+        if not self._instructor:
+            raise RuntimeError("No instructor configured")
+
+        result = await self._instructor.handle_query(
+            game_svc=self,
+            query=query,
+            game_session_id=game_session_id,
+            user_id=user_id,
+            username=username,
+            level=level,
+            fen=self.board.fen() if self.board else fen,
+            white=self.white,
+        )
+        return result
+
     async def start_new_session(self, session: GameSession) -> GameSession:
         async with UnitOfWork(self._session_factory) as uow:
             repo = PostgresGameRepository(uow.session)
@@ -251,12 +269,15 @@ class GameService:
             await uow.commit()
             return result
 
-    async def get_events(self, session_id: UUID, limit: int = 100) -> list[Event]:
+    async def get_events(self, session_id: UUID, event_types: List[str], limit: int = 100) -> list[Event]:
         async with UnitOfWork(self._session_factory) as uow:
             repo = PostgresGameRepository(uow.session)
-            return await repo.get_events_by_session(session_id, limit)
+            return await repo.get_events_by_session(session_id, event_types, limit)
 
     async def upsert_progress(self, progress: UserProgress) -> UserProgress:
+        if not progress.user_id:
+            raise RuntimeError("user_id missing")
+        
         async with UnitOfWork(self._session_factory) as uow:
             repo = PostgresGameRepository(uow.session)
             current = await repo.get_progress(progress.user_id, progress.level, progress.topic_id)
