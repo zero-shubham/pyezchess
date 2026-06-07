@@ -238,3 +238,12 @@ class PostgresGameRepository(GameRepository):
         )
         await self._db.execute(stmt)
         await self._db.flush()
+
+    async def update_metadata(self, session_id: UUID, metadata: dict) -> None:
+        stmt = (
+            update(GameSessionModel)
+            .where(GameSessionModel.id == session_id)
+            .values(game_metadata=self._serialize_meta(metadata))
+        )
+        await self._db.execute(stmt)
+        await self._db.flush()

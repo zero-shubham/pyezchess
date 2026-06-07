@@ -48,3 +48,6 @@ class GameRepository(ABC):
 
     @abstractmethod
     async def update_current_fen(self, session_id: UUID, current_fen: str) -> None: ...
+
+    @abstractmethod
+    async def update_metadata(self, session_id: UUID, metadata: dict) -> None: ...

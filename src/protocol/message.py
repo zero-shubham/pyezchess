@@ -24,6 +24,7 @@ class WSMessageSubtype(StrEnum):
     INFO = "info"
     SUCCESS = "success"
     WARN = "warn"
+    CAPTURED = "captured"
 
 
 @dataclass

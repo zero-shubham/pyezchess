@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import IntEnum, StrEnum
 from uuid import UUID, uuid4
+
+from domain.instructor.model import MOVE_SIDE
 
 
 class Level(IntEnum):
@@ -42,7 +43,8 @@ class Event:
     event_type: EventType = EventType.START_GAME
     payload: str = ""
     metadata: dict | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -56,8 +58,10 @@ class GameSession:
     metadata: dict | None = None
     token_usage: int = 0
     user_token_id: UUID | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -69,8 +73,10 @@ class UserProgress:
     topic_completed: bool = False
     score: int = 0
     attempts: int = 0
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass

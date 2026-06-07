@@ -19,6 +19,7 @@ from domain.game.model import Event, EventRole, EventType
 from domain.instructor.model import LLMClient, MessageOutput, NextMoveOutput, ScoreOutput, ToolExecutor
 from domain.instructor.prompt import PromptGetter
 from domain.toolprovider.service import ToolProvider
+from domain.game.board import EzBoard
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class MoveContext:
 
 @runtime_checkable
 class GameSvcProto(Protocol):
-    board: Board
+    board: EzBoard
     async def add_event(self, event: Event) -> Event: ...
     async def persist_fen(self, game_session_id: UUID, fen: str) -> None: ...
 
@@ -271,7 +272,7 @@ class EvaluateWorkflow(_WorkflowBase):
         if move_obj:
             board.push(move_obj)
         post_fen = board.fen()
-        legal_moves = [board.san(m) for m in board.legal_moves]
+        legal_moves = board.get_legal_moves_san()
 
         try:
             await self._game_svc.persist_fen(UUID(state.game_session_id), post_fen)

@@ -37,6 +37,7 @@ class LangGraphInstructor(Instructor):
             fen=result.instructor_move_fen or result.fen,
             white=result.white,
             instructor_move=result.instructor_move,
+            captured=result.captured,
         )
 
     async def handle_move(self, game_svc: Any, move: str, fen: str, game_session_id: str,

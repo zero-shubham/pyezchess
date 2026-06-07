@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import chess
 import json
 import logging
+from collections.abc import Callable
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from domain.game.board import EzBoard
 from domain.game.model import GameMetadata, GameSession, Level, UserProgress, Event, EventRole, EventType
 from domain.game.session_manager import SessionEntry, SessionManager
 from domain.instructor.interface import Instructor
@@ -24,7 +27,7 @@ class GameService:
         self._session_manager = SessionManager()
         self._instructor: Instructor | None = None
         self._msg_manager: MessageSender | None = None
-        self.board: chess.Board | None = None
+        self.board: EzBoard | None = None
         self.white: MOVE_SIDE = "student"
 
     def set_instructor(self, instructor: Instructor) -> None:
@@ -32,8 +35,48 @@ class GameService:
 
     def get_fen(self) -> str:
         if self.board is None:
-            return chess.Board().fen()
+            return EzBoard().fen()
         return self.board.fen()
+
+    def _make_captured_callback(self, game_session_id: UUID) -> Callable[[], None]:
+        def _sync_blocking_wrapper(loop):
+            future = asyncio.run_coroutine_threadsafe(
+                self._do_persist_captured(game_session_id), loop
+            )
+            future.result()
+
+        def _on_captured() -> None:
+            loop = asyncio.get_running_loop()
+            asyncio.ensure_future(
+                asyncio.to_thread(_sync_blocking_wrapper, loop)
+            )
+
+        return _on_captured
+
+    async def _do_persist_captured(self, game_session_id: UUID) -> None:
+        if not self.board:
+            return
+        captured_state = self.board.captured
+        
+        try:
+            if self._msg_manager:
+                await self._msg_manager.send_message(WSMessage(
+                    type=WSMessageType.GAME,
+                    subtype=WSMessageSubtype.CAPTURED,
+                    payload=captured_state,
+                ))
+                
+            async with UnitOfWork(self._session_factory) as uow:
+                repo = PostgresGameRepository(uow.session)
+                session = await repo.get_session(game_session_id)
+                if session:
+                    metadata = session.metadata or {}
+                    metadata["captured"] = captured_state
+                    await repo.update_metadata(game_session_id, metadata)
+                    await uow.commit()
+        except Exception:
+            logger.exception(
+                "Failed to persist captured state for session %s", game_session_id)
 
     def set_msg_manager(self, msg_manager: MessageSender) -> None:
         self._msg_manager = msg_manager
@@ -60,13 +103,21 @@ class GameService:
         result = await self._instructor.begin_game(self, user_id, username, level)
 
         payload_fen = result.fen
-        self.board = chess.Board(payload_fen)
+        self.board = EzBoard(payload_fen)
+        self.board.set_captured(result.captured or {"white": [], "black": []})
+        self.board.on_captured = self._make_captured_callback(
+            UUID(result.game_session_id))
 
         await self._msg_manager.send_message(WSMessage(
             type=WSMessageType.GAME,
             subtype=WSMessageSubtype.START_GAME,
-            payload={"level": level, "fen": payload_fen,
-                     "white": result.white},
+            payload={
+                "level": level,
+                "fen": payload_fen,
+                "white": result.white,
+                "captured": self.board.captured,
+                "game_session_id": result.game_session_id
+            },
         ))
 
         await self._msg_manager.send_message(WSMessage(
@@ -105,7 +156,7 @@ class GameService:
             raise RuntimeError("No instructor configured")
 
         if not self.board:
-            self.board = chess.Board(fen)
+            raise RuntimeError("handle_move called before begin")
 
         try:
             user_move = self.board.parse_san(move)
@@ -116,7 +167,7 @@ class GameService:
                            move, self.board.fen(), e)
             return MovePlayedResult(valid=False, explanation=f"Invalid move: {e}")
 
-        legal_moves = [self.board.san(m) for m in self.board.legal_moves]
+        legal_moves = self.board.get_legal_moves_san()
 
         result = await self._instructor.handle_move(
             game_svc=self,

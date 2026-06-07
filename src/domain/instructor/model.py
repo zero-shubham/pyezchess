@@ -76,6 +76,7 @@ class ExplainResult:
     fen: str = ""
     white: MOVE_SIDE = "student"
     instructor_move: str = ""
+    captured: dict = field(default_factory=dict)
 
 
 @dataclass

@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.docs.docs import router as docs_router
 from api.v1.auth import router as auth_router
+from api.v1.game_sessions import router as game_sessions_router
 from api.v1.users import router as users_router
 from api.v1.websocket import router as ws_router
 from configs.config import settings
@@ -54,6 +55,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(game_sessions_router)
 app.include_router(ws_router)
 app.include_router(docs_router)
 

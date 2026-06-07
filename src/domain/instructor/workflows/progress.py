@@ -8,9 +8,10 @@ from uuid import UUID
 
 from langgraph.graph import StateGraph, END
 
+from domain.game.board import EzBoard
 from domain.game.model import GameSession, GameSessionStatus, Level
-from domain.game.service import GameService, UserProgress
-from domain.instructor.model import LLMClient, NextMoveOutput
+from domain.game.service import UserProgress
+from domain.instructor.model import LLMClient, NextMoveOutput, MOVE_SIDE
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,8 @@ class ProgressState:
     needs_game: bool = False
     greeting: str = ""
     messages: list = field(default_factory=list)
-    white: Literal["student", "instructor"] = "student"
+    white: MOVE_SIDE = "student"
+    captured: dict = field(default_factory=lambda: {"white": [], "black": []})
     instructor_move: str = ""
     instructor_move_fen: str = ""
 
@@ -79,14 +81,19 @@ class UserProgressWorkflow:
 
         if session is not None and session.status == GameSessionStatus.ACTIVE:
             white = "student"
-            if session.metadata and "white" in session.metadata:
-                white = session.metadata["white"]
+            captured = {"white": [], "black": []}
+            if session.metadata:
+                if "white" in session.metadata:
+                    white = session.metadata["white"]
+                if "captured" in session.metadata:
+                    captured = session.metadata["captured"]
             return {
                 "has_active_session": True,
                 "needs_game": False,
                 "game_session_id": str(session.id),
                 "fen": session.current_fen or state.fen,
                 "white": white,
+                "captured": captured,
             }
 
         return {"has_active_session": False, "needs_game": True}
@@ -113,7 +120,10 @@ class UserProgressWorkflow:
                 status=GameSessionStatus.ACTIVE,
                 initial_fen=state.fen,
                 current_fen=state.fen,
-                metadata={"white": white},
+                metadata={
+                    "white": white,
+                    "captured": {"white": [], "black": []},
+                },
             )
             session = await game_service.start_new_session(session)
             game_session_id = str(session.id)
@@ -189,7 +199,7 @@ class UserProgressWorkflow:
         name = state.username or "Student"
 
         try:
-            board = chess.Board(fen)
+            board = EzBoard(fen)
         except ValueError:
             logger.warning("Invalid FEN in check_instructor_turn: %s", fen)
             return {}
@@ -203,7 +213,7 @@ class UserProgressWorkflow:
         if not is_instructor_turn:
             return {
                 "greeting": state.greeting + (
-                    f" It's your turn, {name}! You're playing {student_side}. "
+                    f" It's your turn! You're playing {student_side}. "
                     f"Go ahead and make your move."
                 ),
             }
@@ -211,8 +221,9 @@ class UserProgressWorkflow:
         if not self._llm:
             return {}
 
-        legal_moves = [board.san(m) for m in board.legal_moves]
-        prompt = INSTRUCTOR_OPENING_PROMPT.format(fen=fen, legal_moves=", ".join(legal_moves))
+        legal_moves = board.get_legal_moves_san()
+        prompt = INSTRUCTOR_OPENING_PROMPT.format(
+            fen=fen, legal_moves=", ".join(legal_moves))
         messages = [{"role": "user", "content": prompt}]
         instructor_move = ""
 
@@ -241,9 +252,11 @@ class UserProgressWorkflow:
                     ),
                 }
             else:
-                logger.warning("Instructor opening move %r not legal, skipping", instructor_move)
+                logger.warning(
+                    "Instructor opening move %r not legal, skipping", instructor_move)
         except (ValueError, chess.InvalidMoveError, chess.IllegalMoveError, chess.AmbiguousMoveError):
-            logger.warning("Instructor opening move %r failed SAN parse, skipping", instructor_move)
+            logger.warning(
+                "Instructor opening move %r failed SAN parse, skipping", instructor_move)
 
         return {
             "greeting": state.greeting + (
