@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol
 from uuid import UUID
 
+from langchain_core.messages import SystemMessage
+from langchain_core.runnables import Runnable
 from langgraph.graph import StateGraph, END
 
 from domain.game.board import EzBoard
@@ -66,6 +68,9 @@ class UserProgressWorkflow:
     def __init__(self, game_service: GameSvc, llm: LLMClient | None = None) -> None:
         self._game_svc = game_service
         self._llm = llm
+        self._llm_structured_next: Runnable | None = None
+        if llm is not None:
+            self._llm_structured_next = llm.with_structured_output(NextMoveOutput)
 
     async def check_active_session(self, state: ProgressState) -> dict:
         game_service = self._game_svc
@@ -220,15 +225,17 @@ class UserProgressWorkflow:
 
         if not self._llm:
             return {}
+        if not self._llm_structured_next:
+            return {}
 
         legal_moves = board.get_legal_moves_san()
         prompt = INSTRUCTOR_OPENING_PROMPT.format(
             fen=fen, legal_moves=", ".join(legal_moves))
-        messages = [{"role": "user", "content": prompt}]
+        messages = [SystemMessage(content=prompt)]
         instructor_move = ""
 
         try:
-            extracted = await self._llm.generate_structured(messages, NextMoveOutput)
+            extracted = await self._llm_structured_next.ainvoke(messages)
             instructor_move = extracted.move
         except Exception:
             logger.exception("failed to generate instructor opening move")

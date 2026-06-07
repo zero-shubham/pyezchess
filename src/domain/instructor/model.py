@@ -32,12 +32,6 @@ class ScoreOutput(BaseModel):
 
 @runtime_checkable
 class LLMClient(Protocol):
-    async def generate_content(self, messages: list[dict], tools: list[dict] | None = None) -> dict[str, Any]:
-        ...
-
-    async def generate_structured(self, messages: list[dict], schema: type[BaseModel]) -> Any:
-        ...
-
     def bind_tools(self, tools: list[BaseTool]) -> Runnable:
         ...
 
