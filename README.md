@@ -47,13 +47,15 @@ docker run -d --network ezchess --name db \
   -e POSTGRES_DB=ezchess \
   postgres:15-alpine
 
-docker run -d --network ezchess --name ezchess -p 3000:3000 \
+docker run --network ezchess --name ezchess -p 3000:3000 \
   -e DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/ezchess \
   -e OPENAI_API_KEY=sk-... \
   zeroshubham/ezchess:latest
 ```
 
 App is now at `http://localhost:3000`. A guest account is auto-created (`guest@ezchess.app` / `Password!`).
+
+> The POC may show a 502 nginx error initially while the Python backend is still starting up. Wait a few seconds and refresh.
 
 ### Environment variables
 
