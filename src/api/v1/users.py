@@ -7,14 +7,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from domain.user.interface import (
+from core.user.interfaces import (
     ErrAdminAlreadyExists,
     ErrUserAlreadyExists,
 )
-from domain.user.service import UserService
-from infrastructure.persistence.database import get_uow
-from infrastructure.persistence.postgres.user_repository import PostgresUserRepository
-from infrastructure.persistence.unit_of_work import UnitOfWork
+from core.user.services import UserService
+from shared.database import get_uow
+from core.user.repository import PostgresUserRepository
+from shared.unit_of_work import UnitOfWork
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
 

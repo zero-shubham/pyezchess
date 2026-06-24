@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import asyncio
-from server.main import app
-from configs.config import settings
+from shared.config import settings
 
 import uvicorn
 
 
 def main():
     uvicorn.run(
-        "server.main:app",
+        "api.router:app",
         host="0.0.0.0",
         port=settings.port,
         reload=True,

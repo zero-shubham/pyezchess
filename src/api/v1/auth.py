@@ -7,24 +7,24 @@ from uuid import UUID
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from configs.config import settings
-from domain.user.interface import (
+from shared.config import settings
+from core.user.interfaces import (
     ErrAdminAlreadyExists,
     ErrInvalidCredentials,
     ErrUserAlreadyExists,
 )
-from domain.user.service import UserService
-from domain.session.model import new_session as create_session_model
-from infrastructure.middleware.session import (
+from core.user.services import UserService
+from core.session.models import new_session as create_session_model
+from shared.middleware import (
     clear_session_cookie,
     generate_session_token,
     hash_token,
     set_session_cookie,
 )
-from infrastructure.persistence.database import get_uow
-from infrastructure.persistence.postgres.session_repository import PostgresSessionRepository
-from infrastructure.persistence.postgres.user_repository import PostgresUserRepository
-from infrastructure.persistence.unit_of_work import UnitOfWork
+from shared.database import get_uow
+from core.session.repository import PostgresSessionRepository
+from core.user.repository import PostgresUserRepository
+from shared.unit_of_work import UnitOfWork
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 

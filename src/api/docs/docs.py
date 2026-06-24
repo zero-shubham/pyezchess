@@ -49,5 +49,5 @@ async def redoc_ui():
 
 @router.get("/api/v1/openapi.json", include_in_schema=False)
 async def openapi_json():
-    from server.main import app
+    from api.router import app
     return JSONResponse(content=app.openapi())

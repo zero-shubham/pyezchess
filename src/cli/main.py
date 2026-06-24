@@ -5,15 +5,15 @@ from uuid import UUID
 
 import typer
 
-from domain.user.interface import (
+from core.user.interfaces import (
     ErrAdminAlreadyExists,
     ErrUserAlreadyExists,
     ErrUserNotFound,
 )
-from domain.user.service import UserService
-from infrastructure.persistence.database import async_session_factory
-from infrastructure.persistence.postgres.user_repository import PostgresUserRepository
-from infrastructure.persistence.unit_of_work import UnitOfWork
+from core.user.services import UserService
+from shared.database import async_session_factory
+from core.user.repository import PostgresUserRepository
+from shared.unit_of_work import UnitOfWork
 
 cli = typer.Typer()
 admin_cli = typer.Typer()
@@ -53,7 +53,7 @@ def admin_list():
 @admin_cli.command("make-admin")
 def admin_make_admin(user_id: str):
     async def _run():
-        from domain.user.model import UserRole
+        from core.user.models import UserRole
         async with UnitOfWork(async_session_factory) as uow:
             svc = UserService(PostgresUserRepository(uow.session))
             try:
@@ -106,7 +106,7 @@ def user_list():
 
 @migrate_cli.command("up")
 def migrate_up():
-    from infrastructure.migration.migrate import run_migrations
+    from shared.migrate import run_migrations
     async def _run():
         await run_migrations("upgrade", "head")
     asyncio.run(_run())
@@ -114,7 +114,7 @@ def migrate_up():
 
 @migrate_cli.command("down")
 def migrate_down():
-    from infrastructure.migration.migrate import run_migrations
+    from shared.migrate import run_migrations
     async def _run():
         await run_migrations("downgrade", "-1")
     asyncio.run(_run())

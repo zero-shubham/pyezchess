@@ -46,11 +46,8 @@ dev = [
 packages = [
     "src/api",
     "src/cli",
-    "src/configs",
-    "src/domain",
-    "src/infrastructure",
-    "src/protocol",
-    "src/server",
+    "src/core",
+    "src/shared",
 ]
 
 [tool.pyright]

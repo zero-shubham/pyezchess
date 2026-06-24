@@ -6,9 +6,9 @@ from uuid import UUID, uuid4
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from domain.user.model import User, UserRole
-from domain.user.service import UserService
-from domain.user.repository import UserRepository
+from core.user.models import User, UserRole
+from core.user.services import UserService
+from core.user.interfaces import UserRepository
 
 
 class MockUserRepository(UserRepository):
@@ -131,7 +131,7 @@ async def test_password_hashing():
 
 
 def test_ws_message_serialization():
-    from interfaces.message import WSMessage, WSMessageType, WSMessageSubtype
+    from shared.message import WSMessage, WSMessageType, WSMessageSubtype
     msg = WSMessage(
         type=WSMessageType.GAME,
         subtype=WSMessageSubtype.MOVE,

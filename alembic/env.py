@@ -3,8 +3,13 @@ from __future__ import annotations
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from configs.config import settings
-from infrastructure.persistence.postgres.models import Base
+from shared.config import settings
+from shared.database import Base
+
+# Import all ORM models so they register with Base.metadata
+import core.game.models  # noqa: F401
+import core.user.models  # noqa: F401
+import core.session.models  # noqa: F401
 
 target_metadata = Base.metadata
 

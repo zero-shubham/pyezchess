@@ -5,21 +5,19 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Cookie, WebSocket, WebSocketDisconnect
 
-from configs.config import get_available_provider_and_key, settings
-from domain.game.model import GameSessionStatus
-from domain.game.service import GameService
-from domain.game.session_manager import SessionEntry
-from domain.instructor.service import LangGraphInstructor
-from domain.instructor.prompt import PromptGetter
-from infrastructure.ai.factory import create_llm_client
-from infrastructure.ai.provider import LLMProvider
-from infrastructure.middleware.session import hash_token
-from infrastructure.persistence.database import async_session_factory
-from infrastructure.persistence.postgres.session_repository import PostgresSessionRepository
-from infrastructure.persistence.postgres.user_repository import PostgresUserRepository
-from infrastructure.persistence.unit_of_work import UnitOfWork
-from infrastructure.websocket import WebsocketMsgManager
-from interfaces.message import SessionContext, WSMessageSubtype
+from shared.config import get_available_provider_and_key, settings
+from core.game.models import GameSessionStatus
+from core.game.services import GameService, SessionEntry
+from core.agent.services import LangGraphInstructor
+from core.agent.prompts import PromptGetter
+from core.agent.clients import create_llm_client, LLMProvider
+from shared.middleware import hash_token
+from shared.database import async_session_factory
+from core.session.repository import PostgresSessionRepository
+from core.user.repository import PostgresUserRepository
+from shared.unit_of_work import UnitOfWork
+from api.websocket.msg_manager import WebsocketMsgManager
+from shared.message import SessionContext, WSMessageSubtype
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

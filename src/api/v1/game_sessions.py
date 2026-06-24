@@ -7,13 +7,13 @@ from uuid import UUID
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from configs.config import settings
-from infrastructure.middleware.session import hash_token
-from infrastructure.persistence.database import get_uow
-from infrastructure.persistence.postgres.game_repository import PostgresGameRepository
-from infrastructure.persistence.postgres.session_repository import PostgresSessionRepository
-from infrastructure.persistence.postgres.user_repository import PostgresUserRepository
-from infrastructure.persistence.unit_of_work import UnitOfWork
+from shared.config import settings
+from shared.middleware import hash_token
+from shared.database import get_uow
+from core.game.repository import PostgresGameRepository
+from core.session.repository import PostgresSessionRepository
+from core.user.repository import PostgresUserRepository
+from shared.unit_of_work import UnitOfWork
 
 router = APIRouter(prefix="/api/v1/game-sessions", tags=["game-sessions"])
 

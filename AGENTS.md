@@ -10,12 +10,11 @@
 
 **Stack:** Python 3.14, FastAPI, PostgreSQL 15, SQLAlchemy (async), LangChain/LangGraph, python-chess + Stockfish.
 
-**Architecture:** Hexagonal / Clean Architecture.
-- `src/domain/` — business logic, abstract interfaces, dataclass models
-- `src/infrastructure/` — Postgres repos, AI providers, WebSocket, migrations
-- `src/api/v1/` — FastAPI routes (REST + WebSocket)
-- `src/configs/` — Pydantic settings
-- `src/protocol/` — WebSocket message schemas
+**Architecture:** Hybrid Feature-Slice + Unified Delivery Gates (see [`docs/llm/STRUCTURE.md`](docs/llm/STRUCTURE.md)).
+- `src/core/` — feature-sliced domain verticals (game, agent, user, session)
+- `src/shared/` — cross-cutting infrastructure (config, database, middleware, message protocol)
+- `src/api/` — FastAPI delivery gate (REST + WebSocket)
+- `src/cli/` — Typer CLI delivery gate
 - `src/tests/` — pytest test suite
 
 ---
