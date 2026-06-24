@@ -9,7 +9,7 @@ from uuid import UUID
 from domain.game.service import GameService
 from starlette.websockets import WebSocket, WebSocketState
 
-from protocol.message import WSMessage, WSMessageSubtype, WSMessageType
+from interfaces.message import WSMessage, WSMessageSubtype, WSMessageType
 
 logger = logging.getLogger(__name__)
 

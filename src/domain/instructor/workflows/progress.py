@@ -3,6 +3,7 @@ from __future__ import annotations
 import chess
 import logging
 from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable
 from typing import Literal, Protocol
 from uuid import UUID
 
@@ -14,6 +15,7 @@ from domain.game.board import EzBoard
 from domain.game.model import GameSession, GameSessionStatus, Level
 from domain.game.service import UserProgress
 from domain.instructor.model import LLMClient, NextMoveOutput, MOVE_SIDE
+from domain.instructor.token_tracker import TokenUsageCallback, log_token_usage, token_totals
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +67,15 @@ def _decide_white(past_session_count: int) -> str:
 
 class UserProgressWorkflow:
 
-    def __init__(self, game_service: GameSvc, llm: LLMClient | None = None) -> None:
+    def __init__(
+        self,
+        game_service: GameSvc,
+        llm: LLMClient | None = None,
+        token_persist: Callable[[str, int, int], Awaitable[None]] | None = None,
+    ) -> None:
         self._game_svc = game_service
         self._llm = llm
+        self._token_persist = token_persist
         self._llm_structured_next: Runnable | None = None
         if llm is not None:
             self._llm_structured_next = llm.with_structured_output(NextMoveOutput)
@@ -235,7 +243,12 @@ class UserProgressWorkflow:
         instructor_move = ""
 
         try:
-            extracted = await self._llm_structured_next.ainvoke(messages)
+            token_cb = TokenUsageCallback()
+            extracted = await self._llm_structured_next.ainvoke(messages, config={"callbacks": [token_cb]})
+            log_token_usage("instructor_opening", token_cb.usage_metadata)
+            if self._token_persist and state.game_session_id:
+                i, o = token_totals(token_cb.usage_metadata)
+                await self._token_persist(state.game_session_id, i, o)
             instructor_move = extracted.move
         except Exception:
             logger.exception("failed to generate instructor opening move")
@@ -306,9 +319,10 @@ async def run_progress_check(
     level: int,
     game_service: GameSvc,
     llm: LLMClient | None = None,
+    token_persist: Callable[[str, int, int], Awaitable[None]] | None = None,
 ) -> ProgressState:
     graph = build_progress_workflow(UserProgressWorkflow(
-        game_service, llm)).compile()
+        game_service, llm, token_persist=token_persist)).compile()
 
     initial = ProgressState(
         user_id=user_id,

@@ -43,6 +43,7 @@ class PostgresGameRepository(GameRepository):
 
     @staticmethod
     def _session_to_domain(m: GameSessionModel) -> GameSession:
+        tu: dict[str, int] = m.token_usage if isinstance(m.token_usage, dict) else {"input_tokens": 0, "output_tokens": 0}
         return GameSession(
             id=m.id,
             user_id=m.user_id,
@@ -51,7 +52,7 @@ class PostgresGameRepository(GameRepository):
             initial_fen=m.initial_fen or "",
             current_fen=m.current_fen or "",
             metadata=PostgresGameRepository._deserialize_meta(m.game_metadata),
-            token_usage=m.token_usage or 0,
+            token_usage=tu,
             created_at=m.created_at,
             updated_at=m.updated_at,
         )
@@ -225,13 +226,21 @@ class PostgresGameRepository(GameRepository):
         await self._db.execute(stmt)
         await self._db.flush()
 
-    async def increment_token_usage(self, session_id: UUID, tokens: int) -> None:
-        stmt = (
-            update(GameSessionModel)
-            .where(GameSessionModel.id == session_id)
-            .values(token_usage=GameSessionModel.token_usage + tokens)
-        )
-        await self._db.execute(stmt)
+    async def increment_token_usage(self, session_id: UUID, input_tokens: int, output_tokens: int) -> None:
+        from sqlalchemy import text
+        stmt = text("""
+            UPDATE game_sessions
+            SET token_usage = jsonb_build_object(
+                'input_tokens', COALESCE((token_usage->>'input_tokens')::int, 0) + :input_tokens,
+                'output_tokens', COALESCE((token_usage->>'output_tokens')::int, 0) + :output_tokens
+            )
+            WHERE id = :session_id
+        """)
+        await self._db.execute(stmt, {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "session_id": session_id,
+        })
         await self._db.flush()
 
     async def update_current_fen(self, session_id: UUID, current_fen: str) -> None:

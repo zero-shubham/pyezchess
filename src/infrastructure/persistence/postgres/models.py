@@ -69,7 +69,7 @@ class GameSessionModel(Base):
     initial_fen: Mapped[str] = mapped_column(Text, nullable=False)
     current_fen: Mapped[str] = mapped_column(Text, nullable=False)
     game_metadata: Mapped[str | None] = mapped_column("metadata", Text, nullable=True)
-    token_usage: Mapped[int] = mapped_column(Integer, default=0)
+    token_usage: Mapped[dict] = mapped_column(JSONB, default=lambda: {"input_tokens": 0, "output_tokens": 0})
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

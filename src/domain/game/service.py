@@ -17,7 +17,7 @@ from domain.instructor.interface import Instructor
 from domain.instructor.model import ExplainResult, MovePlayedResult, MOVE_SIDE, QueryResult
 from infrastructure.persistence.postgres.game_repository import PostgresGameRepository
 from infrastructure.persistence.unit_of_work import UnitOfWork
-from protocol.message import MessageSender, WSMessage, WSMessageType, WSMessageSubtype
+from interfaces.message import MessageSender, WSMessage, WSMessageType, WSMessageSubtype
 
 logger = logging.getLogger(__name__)
 
@@ -306,10 +306,10 @@ class GameService:
             repo = PostgresGameRepository(uow.session)
             return await repo.get_user_sessions(user_id, limit)
 
-    async def increment_token_usage(self, session_id: UUID, tokens: int) -> None:
+    async def increment_token_usage(self, session_id: UUID, input_tokens: int, output_tokens: int) -> None:
         async with UnitOfWork(self._session_factory) as uow:
             repo = PostgresGameRepository(uow.session)
-            await repo.increment_token_usage(session_id, tokens)
+            await repo.increment_token_usage(session_id, input_tokens, output_tokens)
             await uow.commit()
 
     async def register_session(self, entry: SessionEntry) -> None:

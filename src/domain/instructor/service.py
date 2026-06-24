@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from uuid import UUID
 
 from domain.instructor.interface import Instructor
 from domain.instructor.model import ExplainResult, LLMClient, MovePlayedResult, QueryResult
@@ -23,6 +24,16 @@ class LangGraphInstructor(Instructor):
         self._system_prompt = system_prompt
         self._user_id = user_id
 
+    async def _persist_token_usage(
+        self, game_svc: Any, session_id: str, input_tokens: int, output_tokens: int
+    ) -> None:
+        await game_svc.increment_token_usage(UUID(session_id), input_tokens, output_tokens)
+
+    def _make_token_persist(self, game_svc: Any):
+        async def _persist(session_id: str, input_tokens: int, output_tokens: int) -> None:
+            await self._persist_token_usage(game_svc, session_id, input_tokens, output_tokens)
+        return _persist
+
     async def begin_game(self, game_svc: Any, user_id: str, username: str, level: int) -> ExplainResult:
         result = await run_progress_check(
             user_id=user_id,
@@ -30,6 +41,7 @@ class LangGraphInstructor(Instructor):
             level=level,
             game_service=game_svc,
             llm=self._llm,
+            token_persist=self._make_token_persist(game_svc),
         )
 
         return ExplainResult(
@@ -54,6 +66,7 @@ class LangGraphInstructor(Instructor):
             game_session_id=game_session_id,
             llm=self._llm,
             game_svc=game_svc,
+            token_persist=self._make_token_persist(game_svc),
             legal_moves=legal_moves,
             white=white,
         )
@@ -82,5 +95,6 @@ class LangGraphInstructor(Instructor):
             white=white,
             llm=self._llm,
             game_svc=game_svc,
+            token_persist=self._make_token_persist(game_svc),
         )
         return QueryResult(explanation=result.explanation)

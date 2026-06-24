@@ -131,7 +131,7 @@ async def test_password_hashing():
 
 
 def test_ws_message_serialization():
-    from protocol.message import WSMessage, WSMessageType, WSMessageSubtype
+    from interfaces.message import WSMessage, WSMessageType, WSMessageSubtype
     msg = WSMessage(
         type=WSMessageType.GAME,
         subtype=WSMessageSubtype.MOVE,

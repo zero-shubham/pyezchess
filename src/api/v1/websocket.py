@@ -19,7 +19,7 @@ from infrastructure.persistence.postgres.session_repository import PostgresSessi
 from infrastructure.persistence.postgres.user_repository import PostgresUserRepository
 from infrastructure.persistence.unit_of_work import UnitOfWork
 from infrastructure.websocket import WebsocketMsgManager
-from protocol.message import SessionContext, WSMessageSubtype
+from interfaces.message import SessionContext, WSMessageSubtype
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -118,6 +118,6 @@ async def game_websocket(
                 if session:
                     session.status = GameSessionStatus.ABANDONED
                     await game_svc.update_session(session)
-                await game_svc.increment_token_usage(game_session_id, 0)
+                await game_svc.increment_token_usage(game_session_id, 0, 0)
         except Exception:
             pass

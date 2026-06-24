@@ -29,7 +29,7 @@ test:
 	pytest -v
 
 req:
-	uv export --format requirements-txt --no-emit-package pyezchess > requirements.txt
+	uv export --format requirements-txt --extra dev --no-emit-package pyezchess > requirements.txt
 
 req-prod:
 	uv export --format requirements-txt --no-dev --no-emit-package pyezchess > requirements.txt

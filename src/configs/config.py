@@ -45,5 +45,8 @@ class Settings(BaseSettings):
     log_level: str = "info"
     stockfish_path: str = "/usr/local/bin/stockfish"
 
+    # LLM retry on transient errors (429, 5xx) — built into all provider SDKs
+    llm_max_retries: int = 3
+
 
 settings = Settings()

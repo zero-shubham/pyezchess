@@ -57,7 +57,7 @@ class GameSession:
     initial_fen: str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
     current_fen: str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
     metadata: dict | None = None
-    token_usage: int = 0
+    token_usage: dict[str, int] = field(default_factory=lambda: {"input_tokens": 0, "output_tokens": 0})
     user_token_id: UUID | None = None
     created_at: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc))

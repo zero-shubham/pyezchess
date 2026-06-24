@@ -3,11 +3,10 @@ from __future__ import annotations
 import logging
 import asyncio
 from dataclasses import dataclass, field
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Annotated, Protocol, runtime_checkable
 from uuid import UUID
 
-from chess import Board
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import StateGraph, END
@@ -19,6 +18,7 @@ from langgraph.runtime import Runtime
 from domain.game.model import Event, EventRole, EventType
 from domain.instructor.model import LLMClient, MessageOutput, NextMoveOutput, ScoreOutput, ToolExecutor
 from domain.instructor.prompt import PromptGetter
+from domain.instructor.token_tracker import TokenUsageCallback, log_token_usage, token_totals
 from domain.toolprovider.service import ToolProvider
 from domain.game.board import EzBoard
 
@@ -179,10 +179,16 @@ def _player_colors(white: str) -> tuple[str, str]:
 
 
 class _WorkflowBase:
-    def __init__(self, llm: LLMClient, tools: Sequence[BaseTool]) -> None:
+    def __init__(
+        self,
+        llm: LLMClient,
+        tools: Sequence[BaseTool],
+        token_persist: Callable[[str, int, int], Awaitable[None]],
+    ) -> None:
         self._llm = llm
         self._tools = tools
         self._llm_with_tools = llm.bind_tools(self._tools)
+        self._token_persist = token_persist
 
     def _build_messages(self, content: str, *, no_tool: bool = False) -> list[BaseMessage]:
         if no_tool:
@@ -199,13 +205,25 @@ class _WorkflowBase:
         async def node(state) -> dict:
             logger.info(f"CONTEXT HAS {len(state.messages)} messages")
             response = await self._llm_with_tools.ainvoke(state.messages)
+            usage = getattr(response, "usage_metadata", None)
+            log_token_usage(f"llm_{step}", usage)
+            if state.game_session_id:
+                i, o = token_totals(usage)
+                await self._token_persist(state.game_session_id, i, o)
             return {"messages": [response], "_current_step": step}
         return node
 
 
 class EvaluateWorkflow(_WorkflowBase):
-    def __init__(self, llm: LLMClient, game_svc: GameSvcProto, tool_executor: ToolExecutor, tools: Sequence[BaseTool]) -> None:
-        super().__init__(llm, tools)
+    def __init__(
+        self,
+        llm: LLMClient,
+        game_svc: GameSvcProto,
+        tool_executor: ToolExecutor,
+        tools: Sequence[BaseTool],
+        token_persist: Callable[[str, int, int], Awaitable[None]],
+    ) -> None:
+        super().__init__(llm, tools, token_persist=token_persist)
         self._game_svc = game_svc
         self._tool_executor = tool_executor
         self._llm_structured_score = llm.with_structured_output(ScoreOutput)
@@ -248,7 +266,12 @@ class EvaluateWorkflow(_WorkflowBase):
             analysis=raw_text,
         )
         messages = self._build_messages(prompt, no_tool=True)
-        result = await self._llm_structured_score.ainvoke(messages)
+        token_cb = TokenUsageCallback()
+        result = await self._llm_structured_score.ainvoke(messages, config={"callbacks": [token_cb]})
+        log_token_usage("structured_score", token_cb.usage_metadata)
+        if self._token_persist and state.game_session_id:
+            i, o = token_totals(token_cb.usage_metadata)
+            await self._token_persist(state.game_session_id, i, o)
         grade = result.grade if result else "GOOD"
         delta = result.delta if result else 1
         reason = result.reason if result else ""
@@ -306,8 +329,15 @@ class EvaluateWorkflow(_WorkflowBase):
 
 
 class InstructorMoveWorkflow(_WorkflowBase):
-    def __init__(self, llm: LLMClient, game_svc: GameSvcProto, tool_provider: ToolProvider, tools: Sequence[BaseTool]) -> None:
-        super().__init__(llm, tools)
+    def __init__(
+        self,
+        llm: LLMClient,
+        game_svc: GameSvcProto,
+        tool_provider: ToolProvider,
+        tools: Sequence[BaseTool],
+        token_persist: Callable[[str, int, int], Awaitable[None]],
+    ) -> None:
+        super().__init__(llm, tools, token_persist=token_persist)
         self._game_svc = game_svc
         self._tool_provider = tool_provider
         self._llm_structured_move = llm.with_structured_output(NextMoveOutput)
@@ -345,7 +375,12 @@ class InstructorMoveWorkflow(_WorkflowBase):
             vishy_color=vishy_color, student_color=student_color,
             analysis=raw_text)
         messages = self._build_messages(prompt, no_tool=True)
-        result = await self._llm_structured_move.ainvoke(messages)
+        token_cb = TokenUsageCallback()
+        result = await self._llm_structured_move.ainvoke(messages, config={"callbacks": [token_cb]})
+        log_token_usage("structured_next_move", token_cb.usage_metadata)
+        if self._token_persist and state.game_session_id:
+            i, o = token_totals(token_cb.usage_metadata)
+            await self._token_persist(state.game_session_id, i, o)
         next_move = result.move if result else ""
         logger.info("structured_next_move: move=%s", next_move)
         return {"next_move": next_move, "invalid_move": "", "_current_step": "validate"}
@@ -375,7 +410,12 @@ class InstructorMoveWorkflow(_WorkflowBase):
             invalid_move=invalid_move, analysis=raw_text,
             vishy_color=vishy_color, student_color=student_color)
         messages = self._build_messages(prompt, no_tool=True)
-        result = await self._llm_structured_move.ainvoke(messages)
+        token_cb = TokenUsageCallback()
+        result = await self._llm_structured_move.ainvoke(messages, config={"callbacks": [token_cb]})
+        log_token_usage("structured_retry_move", token_cb.usage_metadata)
+        if self._token_persist and state.game_session_id:
+            i, o = token_totals(token_cb.usage_metadata)
+            await self._token_persist(state.game_session_id, i, o)
         next_move = result.move if result else ""
         logger.info("structured_retry_move: move=%s", next_move)
         return {"next_move": next_move, "invalid_move": invalid_move, "_current_step": "validate"}
@@ -384,7 +424,12 @@ class InstructorMoveWorkflow(_WorkflowBase):
         prompt = MESSAGE_PROMPT.format(
             fen=state.fen, move=state.move, next_move=state.next_move)
         messages = self._build_messages(prompt, no_tool=True)
-        result = await self._llm_structured_message.ainvoke(messages)
+        token_cb = TokenUsageCallback()
+        result = await self._llm_structured_message.ainvoke(messages, config={"callbacks": [token_cb]})
+        log_token_usage("generate_message", token_cb.usage_metadata)
+        if self._token_persist and state.game_session_id:
+            i, o = token_totals(token_cb.usage_metadata)
+            await self._token_persist(state.game_session_id, i, o)
         message = result.message if result else ""
         if state.game_session_id and state.next_move:
             try:
@@ -522,6 +567,7 @@ async def run_move_workflow(
     game_session_id: str,
     llm: LLMClient,
     game_svc: GameSvcProto,
+    token_persist: Callable[[str, int, int], Awaitable[None]],
     legal_moves: list[str] | None = None,
     white: str | None = None,
 ) -> MoveState:
@@ -530,8 +576,8 @@ async def run_move_workflow(
         evaluate_tools = tool_provider.get_tools()
         instructor_move_tools = tool_provider.get_tools()
 
-        ew = EvaluateWorkflow(llm, game_svc, tool_provider, tools=evaluate_tools)
-        imw = InstructorMoveWorkflow(llm, game_svc, tool_provider, tools=instructor_move_tools)
+        ew = EvaluateWorkflow(llm, game_svc, tool_provider, tools=evaluate_tools, token_persist=token_persist)
+        imw = InstructorMoveWorkflow(llm, game_svc, tool_provider, tools=instructor_move_tools, token_persist=token_persist)
 
         eval_graph = build_evaluate_workflow(ew).compile()
         eval_result = await asyncio.shield(eval_graph.ainvoke(

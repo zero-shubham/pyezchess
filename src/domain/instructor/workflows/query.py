@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Annotated, Sequence
+from collections.abc import Awaitable, Callable, Sequence
+from typing import Annotated
 from uuid import UUID
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -14,6 +15,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from domain.game.model import Event, EventRole, EventType
 from domain.instructor.model import LLMClient
 from domain.instructor.prompt import PromptGetter
+from domain.instructor.token_tracker import log_token_usage, token_totals
 from domain.toolprovider.service import ToolProvider
 
 logger = logging.getLogger(__name__)
@@ -63,12 +65,20 @@ def _player_colors(white: str) -> tuple[str, str]:
 
 
 class QueryWorkflow:
-    def __init__(self, llm: LLMClient, game_svc, tool_provider: ToolProvider, tools: Sequence[BaseTool]) -> None:
+    def __init__(
+        self,
+        llm: LLMClient,
+        game_svc,
+        tool_provider: ToolProvider,
+        tools: Sequence[BaseTool],
+        token_persist: Callable[[str, int, int], Awaitable[None]],
+    ) -> None:
         self._llm = llm
         self._game_svc = game_svc
         self._tool_provider = tool_provider
         self._tools = tools
         self._llm_with_tools = llm.bind_tools(list(self._tools))
+        self._token_persist = token_persist
 
     def _build_messages(self, system_content: str, *, no_tool: bool = False) -> list[BaseMessage]:
         if no_tool:
@@ -134,6 +144,11 @@ class QueryWorkflow:
         async def node(state: QueryState) -> dict:
             logger.info("QUERY CONTEXT HAS %d messages", len(state.messages))
             response = await self._llm_with_tools.ainvoke(state.messages)
+            usage = getattr(response, "usage_metadata", None)
+            log_token_usage(f"llm_{step}", usage)
+            if state.game_session_id:
+                i, o = token_totals(usage)
+                await self._token_persist(state.game_session_id, i, o)
             return {"messages": [response], "_current_step": step}
         return node
 
@@ -181,11 +196,12 @@ async def run_query_workflow(
     white: str,
     llm: LLMClient,
     game_svc,
+    token_persist: Callable[[str, int, int], Awaitable[None]],
 ) -> QueryState:
     tool_provider = ToolProvider(game_service=game_svc, game_session_id=game_session_id)
     try:
         query_tools = tool_provider.get_tools()
-        qw = QueryWorkflow(llm, game_svc, tool_provider, tools=query_tools)
+        qw = QueryWorkflow(llm, game_svc, tool_provider, tools=query_tools, token_persist=token_persist)
 
         graph = build_query_workflow(qw).compile()
         result = await graph.ainvoke(

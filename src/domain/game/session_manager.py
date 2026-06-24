@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
-from protocol.message import WSMessage, WSMessageType, WSMessageSubtype
+from interfaces.message import WSMessage, WSMessageType, WSMessageSubtype
 
 
 @dataclass

@@ -28,6 +28,11 @@ class GameMetadataResponse(BaseModel):
     captured: CapturedPieces
 
 
+class TokenUsageResponse(BaseModel):
+    input_tokens: int
+    output_tokens: int
+
+
 class GameSessionResponse(BaseModel):
     id: UUID
     user_id: UUID | None
@@ -36,7 +41,7 @@ class GameSessionResponse(BaseModel):
     initial_fen: str
     current_fen: str
     metadata: GameMetadataResponse | None
-    token_usage: int
+    token_usage: TokenUsageResponse
     created_at: datetime
     updated_at: datetime
 
@@ -92,7 +97,10 @@ async def get_game_session(
         initial_fen=game_session.initial_fen,
         current_fen=game_session.current_fen,
         metadata=metadata,
-        token_usage=game_session.token_usage,
+        token_usage=TokenUsageResponse(
+            input_tokens=game_session.token_usage.get("input_tokens", 0),
+            output_tokens=game_session.token_usage.get("output_tokens", 0),
+        ),
         created_at=game_session.created_at,
         updated_at=game_session.updated_at,
     )

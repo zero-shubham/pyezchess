@@ -66,7 +66,7 @@ async def login(
         session = create_session_model(
             user_id=user.id,
             token_hash=token_hash_val,
-            ip=request.client.host if request.client else "",
+            ip="",
             ua=request.headers.get("user-agent", ""),
             ttl_seconds=settings.session_max_age_seconds,
         )
