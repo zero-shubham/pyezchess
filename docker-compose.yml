@@ -9,6 +9,7 @@ services:
       - "8080:8080"
       - "4444:4444"
     environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/ezchess
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
@@ -26,6 +27,8 @@ services:
       - PYTHONPATH=/app/src
     depends_on:
       db:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     volumes:
       - .:/app
@@ -46,6 +49,35 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    ports:
+      - "5672:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: dramatiq core.tasks.actors
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/ezchess
+      - SESSION_SECRET=change-me-in-production
+      - LOG_LEVEL=info
+      - PYTHONPATH=/app/src
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - .:/app
 
 volumes:
   pgdata:

@@ -1,4 +1,4 @@
-.PHONY: dev up down build clean lint format typecheck test req req-prod migrate-up migrate-down
+.PHONY: dev up down build clean lint format typecheck test req req-prod migrate-up migrate-down worker
 
 dev: req
 	docker compose up --build
@@ -39,3 +39,6 @@ migrate-up:
 
 migrate-down:
 	docker compose run --rm app python -m cli.main migrate down
+
+worker:
+	docker compose up worker
