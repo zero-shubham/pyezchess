@@ -6,7 +6,8 @@ from sqlalchemy import select, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.session.interfaces import SessionRepository
-from core.session.models import Session, UserSessionModel
+from core.session.schemas import Session
+from core.session.models import UserSessionModel
 
 
 class PostgresSessionRepository(SessionRepository):

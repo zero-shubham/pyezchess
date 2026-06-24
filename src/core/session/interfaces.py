@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from core.session.models import Session
+from core.session.schemas import Session
 
 
 class SessionRepository(ABC):

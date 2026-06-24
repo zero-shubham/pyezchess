@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from core.game.models import Event, GameSession, Level, UserProgress
+from core.game.schemas import Event, GameSession, Level, UserProgress
 
 
 class GameRepository(ABC):

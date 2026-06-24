@@ -6,7 +6,8 @@ from sqlalchemy import select, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.user.interfaces import UserRepository
-from core.user.models import User, UserModel, UserRole
+from core.user.schemas import User, UserRole
+from core.user.models import UserModel
 
 
 class PostgresUserRepository(UserRepository):

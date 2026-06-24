@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from core.user.models import User, UserRole
+from core.user.schemas import User, UserRole
 
 
 class ErrUserNotFound(Exception):

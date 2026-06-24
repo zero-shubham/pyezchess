@@ -7,17 +7,19 @@ from sqlalchemy import select, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.game.interfaces import GameRepository
-from core.game.models import (
+from core.game.schemas import (
     Event,
     EventRole,
     EventType,
     GameSession,
     GameSessionStatus,
+    Level,
+    UserProgress,
+)
+from core.game.models import (
     GameSessionModel,
     GameSessionEventModel,
     UserProgressModel,
-    Level,
-    UserProgress,
 )
 
 

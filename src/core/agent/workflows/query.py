@@ -12,11 +12,10 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from core.game.models import Event, EventRole, EventType
+from core.game import Event, EventRole, EventType, ToolProvider
 from core.agent.models import LLMClient
 from core.agent.prompts import PromptGetter
 from core.agent.token_tracker import log_token_usage, token_totals
-from core.game.tools import ToolProvider
 
 logger = logging.getLogger(__name__)
 

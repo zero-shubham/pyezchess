@@ -15,11 +15,10 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.runtime import Runtime
 
 
-from core.game.models import Event, EventRole, EventType, EzBoard
+from core.game import Event, EventRole, EventType, EzBoard, ToolProvider
 from core.agent.models import LLMClient, MessageOutput, NextMoveOutput, ScoreOutput, ToolExecutor
 from core.agent.prompts import PromptGetter
 from core.agent.token_tracker import TokenUsageCallback, log_token_usage, token_totals
-from core.game.tools import ToolProvider
 
 logger = logging.getLogger(__name__)
 

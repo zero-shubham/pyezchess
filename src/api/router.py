@@ -13,8 +13,8 @@ from api.v1.game_sessions import router as game_sessions_router
 from api.v1.users import router as users_router
 from api.v1.websocket import router as ws_router
 from shared.config import settings
-from core.game.services import SessionManager
-from core.agent.prompts import PromptGetter
+from core.game import SessionManager
+from core.agent import PromptGetter
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),

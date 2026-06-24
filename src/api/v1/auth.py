@@ -14,7 +14,7 @@ from core.user.interfaces import (
     ErrUserAlreadyExists,
 )
 from core.user.services import UserService
-from core.session.models import new_session as create_session_model
+from core.session.schemas import new_session as create_session_model
 from shared.middleware import (
     clear_session_cookie,
     generate_session_token,

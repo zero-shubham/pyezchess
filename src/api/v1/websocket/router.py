@@ -6,17 +6,14 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Cookie, WebSocket, WebSocketDisconnect
 
 from shared.config import get_available_provider_and_key, settings
-from core.game.models import GameSessionStatus
-from core.game.services import GameService, SessionEntry
-from core.agent.services import LangGraphInstructor
-from core.agent.prompts import PromptGetter
-from core.agent.clients import create_llm_client, LLMProvider
+from core.game import GameSessionStatus, GameService, SessionEntry
+from core.agent import LangGraphInstructor, PromptGetter, create_llm_client, LLMProvider
 from shared.middleware import hash_token
 from shared.database import async_session_factory
 from core.session.repository import PostgresSessionRepository
 from core.user.repository import PostgresUserRepository
 from shared.unit_of_work import UnitOfWork
-from api.websocket.msg_manager import WebsocketMsgManager
+from api.v1.websocket.msg_manager import WebsocketMsgManager
 from shared.message import SessionContext, WSMessageSubtype
 
 logger = logging.getLogger(__name__)

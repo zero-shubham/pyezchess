@@ -26,7 +26,7 @@ typecheck:
 	pyright
 
 test:
-	pytest -v
+	uv run pytest -v
 
 req:
 	uv export --format requirements-txt --extra dev --no-emit-package pyezchess > requirements.txt

@@ -53,7 +53,7 @@ def admin_list():
 @admin_cli.command("make-admin")
 def admin_make_admin(user_id: str):
     async def _run():
-        from core.user.models import UserRole
+        from core.user.schemas import UserRole
         async with UnitOfWork(async_session_factory) as uow:
             svc = UserService(PostgresUserRepository(uow.session))
             try:

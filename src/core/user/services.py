@@ -11,7 +11,7 @@ from core.user.interfaces import (
     UserRepository,
     UserServiceInterface,
 )
-from core.user.models import User, UserRole
+from core.user.schemas import User, UserRole
 
 
 class UserService(UserServiceInterface):

@@ -16,37 +16,64 @@ The system is organized into three primary conceptual layout planes:
 ├── src/
 │   ├── shared/                     # Global cross-cutting infrastructure
 │   │   ├── config.py               # Pydantic Settings / Environment variables
-│   │   ├── database.py             # SQLAlchemy engine / session orchestrator
-│   │   └── middleware.py           # Shared interceptors and logging pipelines
+│   │   ├── database.py             # SQLAlchemy engine, session factory, Base, UoW
+│   │   ├── middleware.py           # Cookie/token helpers & session dependency
+│   │   ├── message.py              # WebSocket message types, Protocol (MessageSender)
+│   │   ├── migrate.py              # Alembic migration runner
+│   │   └── unit_of_work.py         # Unit-of-Work async context manager
 │   │
 │   ├── core/                       # Feature-sliced domain verticals
-│   │   ├── game/                   # Rules, move parsing, and logic state
-│   │   │   ├── interfaces.py       # Structural Protocols (IGameRepository)
-│   │   │   ├── models.py           # Core schemas & SQLAlchemy tables
-│   │   │   ├── repository.py       # SQL persistence implementing the Protocol
-│   │   │   └── services.py         # Business operations & chess validations
+│   │   ├── game/                   # Rules, board, state, tools
+│   │   │   ├── interfaces.py       # GameRepository ABC
+│   │   │   ├── schemas.py          # Domain enums + dataclasses (Event, GameSession, …)
+│   │   │   ├── board.py            # EzBoard (capture-aware chess board)
+│   │   │   ├── models.py           # SQLAlchemy ORM tables (GameSessionModel, …)
+│   │   │   ├── repository.py       # PostgresGameRepository implementing GameRepository
+│   │   │   ├── services.py         # GameService + SessionManager
+│   │   │   └── tools.py            # ToolProvider (Stockfish, session history, fen)
+│   │   │
 │   │   ├── agent/                  # Multi-agent orchestration layer
-│   │   │   ├── interfaces.py       # ILLMClient Protocol
-│   │   │   ├── prompts/            # System & behavioral prompt assets (.md)
-│   │   │   ├── clients.py          # Claude / DeepSeek implementing the Protocol
-│   │   │   └── services.py         # Instructor pipelines & token trackers
+│   │   │   ├── interfaces.py       # Instructor ABC
+│   │   │   ├── models.py           # LLMClient Protocol, result dataclasses, structured output schemas
+│   │   │   ├── prompts.py          # PromptGetter singleton (curriculum prompt loader)
+│   │   │   ├── token_tracker.py    # TokenUsageCallback, log_token_usage, token_totals
+│   │   │   ├── clients.py          # LLMWrapper + create_llm_client (Claude / DeepSeek / …)
+│   │   │   ├── services.py         # LangGraphInstructor
+│   │   │   └── workflows/          # LangGraph state graphs
+│   │   │       ├── move.py         # Move evaluation + instructor reply
+│   │   │       ├── progress.py     # Session resume + new-game greeting
+│   │   │       └── query.py        # Free-form student query handling
+│   │   │
 │   │   ├── user/                   # Identity and Profile context
-│   │   └── session/                # Match orchestrations and runtime metadata
+│   │   │   ├── interfaces.py       # UserRepository ABC + UserServiceInterface ABC
+│   │   │   ├── schemas.py          # User dataclass + UserRole enum
+│   │   │   ├── models.py           # UserModel ORM table
+│   │   │   ├── repository.py       # PostgresUserRepository
+│   │   │   └── services.py         # UserService (create, authenticate, role mgmt)
+│   │   │
+│   │   └── session/                # Auth session management
+│   │       ├── interfaces.py       # SessionRepository ABC
+│   │       ├── schemas.py          # Session dataclass + new_session factory
+│   │       ├── models.py           # UserSessionModel ORM table
+│   │       └── repository.py       # PostgresSessionRepository
 │   │
 │   ├── api/                        # Unified Delivery Gate: Web API
 │   │   ├── v1/                     # Versioned controllers / routers
 │   │   │   ├── auth.py
 │   │   │   ├── game_sessions.py
-│   │   │   └── users.py
-│   │   ├── websocket/              # High-frequency transport handlers
-│   │   │   └── msg_manager.py      # Connection pooler & broadcast matrix
-│   │   └── router.py               # Root FastAPI application assembler
+│   │   │   ├── users.py
+│   │   │   └── websocket/          # WebSocket endpoint (module with router + msg_manager)
+│   │   │       ├── __init__.py
+│   │   │       ├── router.py       # WebSocket endpoint handler
+│   │   │       └── msg_manager.py  # WebsocketMsgManager (connection pooler & broadcast)
+│   │   ├── docs/                   # Swagger / ReDoc UI
+│   │   │   └── docs.py
+│   │   └── router.py               # Root FastAPI application assembler + lifespan
 │   │
 │   ├── cli/                        # Unified Delivery Gate: Terminal Tools
-│   │   ├── commands/               # Administrative tools & seeding scripts
-│   │   └── main.py                 # Click / Typer entry point
+│   │   └── main.py                 # Typer CLI (admin, user, migrate commands)
 │   │
-│   └── main.py                     # Global application ASGI bootstrap
+│   └── main.py                     # Uvicorn bootstrap entry point
 ```
 
 # Why This Structure Was Chosen
@@ -80,6 +107,44 @@ The shared/ folder provides low-level framework configurations only and must con
 
     Prohibited: src/shared/database.py imports an explicit model or entity from src/core/game/models.py.
 
+4. Schemas / Models Segregation
+
+Every core vertical must keep domain types and persistence types in separate files:
+
+    schemas.py — enums, dataclasses, domain-only types. No SQLAlchemy imports. No database knowledge.
+    models.py — SQLAlchemy ORM table definitions only. No domain dataclasses or business logic.
+
+    Rationale: Prevents domain logic from coupling to persistence details. Enables importing schemas without triggering ORM engine initialization.
+
+5. Public API via __init__.py (Lazy Re-Export)
+
+Each vertical's __init__.py serves as its public API surface. Leaf types (schemas, enums) are eagerly re-exported. Heavy dependencies (services, tools) use PEP 562 __getattr__ for lazy resolution to avoid circular imports.
+
+Example (src/core/game/__init__.py):
+```Python
+
+# Eager: domain types have no heavy deps
+from core.game.schemas import Event, GameSession, Level, ...
+from core.game.board import EzBoard
+
+# Lazy: services/tools trigger imports into other verticals
+def __getattr__(name: str):
+    if name == "GameService":
+        from core.game.services import GameService
+        return GameService
+    if name == "ToolProvider":
+        from core.game.tools import ToolProvider
+        return ToolProvider
+    raise AttributeError(...)
+```
+
+6. ORM Forward References
+
+SQLAlchemy relationship() annotations use string forward references (e.g. Mapped["UserModel"]) with from __future__ import annotations. No TYPE_CHECKING imports needed — they are always resolved lazily by SQLAlchemy at mapper configuration time.
+
+    Prohibited: from typing import TYPE_CHECKING; if TYPE_CHECKING: from core.user.models import UserModel
+    Correct: from __future__ import annotations … user: Mapped["UserModel | None"] = relationship(…)  # noqa: F821
+
 # Dependency Inversion via Python Protocols
 
 To maintain high architectural resilience, core business components depend on abstractions, not concretions. We enforce this through structural subtyping via Python's typing.Protocol.
@@ -89,7 +154,7 @@ Example 1: The Repository Abstraction (src/core/game/interfaces.py)
 ```Python
 
 from typing import Protocol, Optional
-from src.core.game.models import GameState
+from src.core.game.schemas import GameState
 
 class IGameRepository(Protocol):
     def get_game_by_id(self, game_id: str) -> Optional[GameState]:
@@ -105,7 +170,7 @@ Example 2: Injecting the Interface in Core Services (src/core/game/services.py)
 ```Python
 
 from src.core.game.interfaces import IGameRepository
-from src.core.game.models import GameState
+from src.core.game.schemas import GameState
 
 class GameService:
     # Service accepts ANY object matching the IGameRepository structure
@@ -129,7 +194,8 @@ Example 3: Implementation via Infrastructure Layer (src/core/game/repository.py)
 
 from typing import Optional
 from sqlalchemy.orm import Session
-from src.core.game.models import GameState
+from src.core.game.schemas import GameState
+from src.core.game.models import GameStateModel
 
 class SQLGameRepository:
     \"\"\"Concrete implementation matching IGameRepository Protocol.\"\"\"
@@ -137,9 +203,11 @@ class SQLGameRepository:
         self.db_session = db_session
 
     def get_game_by_id(self, game_id: str) -> Optional[GameState]:
-        return self.db_session.query(GameState).filter(GameState.id == game_id).first()
+        row = self.db_session.query(GameStateModel).filter(GameStateModel.id == game_id).first()
+        return self._to_domain(row) if row else None
 
     def save_game(self, game: GameState) -> None:
-        self.db_session.add(game)
+        row = GameStateModel(id=game.id, ...)
+        self.db_session.add(row)
         self.db_session.commit()
 ```

@@ -13,7 +13,8 @@ from pydantic import BaseModel, Field
 from langchain_core.tools import StructuredTool
 
 from shared.config import settings
-from core.game.models import Event
+from core.game.schemas import Event
+from core.agent.prompts import PromptGetter
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +296,6 @@ class ToolProvider:
 
     async def _get_level_details(self, level: int = 1, topic: str = "") -> dict:
         """Returns curriculum details for a level, or a specific topic within a level"""
-        from core.agent.prompts import PromptGetter
         content = PromptGetter().level_details(level)
         return {"level": level, "content": content, "isComplete": False}
 

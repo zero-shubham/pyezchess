@@ -7,7 +7,7 @@ from fastapi import Cookie, HTTPException, Request
 from fastapi.responses import Response
 
 from shared.config import settings
-from core.session.models import Session as SessionModel
+from core.session.schemas import Session as SessionModel
 
 
 def hash_token(token: str) -> str:

@@ -12,8 +12,9 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from core.game.models import EzBoard, GameMetadata, GameSession, Level, UserProgress, Event, EventRole, EventType
+from core.game.schemas import EzBoard, GameMetadata, GameSession, Level, UserProgress, Event, EventRole, EventType
 from core.game.repository import PostgresGameRepository
+from core.agent.models import MovePlayedResult
 from shared.message import MessageSender, WSMessage, WSMessageType, WSMessageSubtype
 from shared.unit_of_work import UnitOfWork
 
@@ -270,12 +271,10 @@ class GameService:
         try:
             user_move = self.board.parse_san(move)
             if user_move not in self.board.legal_moves:
-                from core.agent.models import MovePlayedResult
                 return MovePlayedResult(valid=False, explanation="Invalid move: not a legal move")
         except (ValueError, chess.InvalidMoveError, chess.IllegalMoveError, chess.AmbiguousMoveError) as e:
             logger.warning("Invalid user move %r on board %s: %s",
                            move, self.board.fen(), e)
-            from core.agent.models import MovePlayedResult
             return MovePlayedResult(valid=False, explanation=f"Invalid move: {e}")
 
         legal_moves = self.board.get_legal_moves_san()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import chess
 
-from core.game.models import EzBoard
+from core.game.board import EzBoard
 
 
 # FEN: early middlegame from Italian Game where captures are possible

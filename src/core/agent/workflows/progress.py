@@ -11,8 +11,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import Runnable
 from langgraph.graph import StateGraph, END
 
-from core.game.models import EzBoard, GameSession, GameSessionStatus, Level
-from core.game.services import UserProgress as UserProgressModel
+from core.game import EzBoard, GameSession, GameSessionStatus, Level, UserProgress
 from core.agent.models import LLMClient, NextMoveOutput, MOVE_SIDE
 from core.agent.token_tracker import TokenUsageCallback, log_token_usage, token_totals
 
@@ -51,7 +50,7 @@ class GameSvc(Protocol):
     async def start_new_session(self, session: GameSession) -> GameSession:
         ...
 
-    async def get_all_progress(self, user_id: UUID) -> list[UserProgressModel]:
+    async def get_all_progress(self, user_id: UUID) -> list[UserProgress]:
         ...
 
     async def get_user_sessions(self, user_id: UUID, limit: int = 50) -> list[GameSession]:

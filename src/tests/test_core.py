@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from core.user.models import User, UserRole
+from core.user.schemas import User, UserRole
 from core.user.services import UserService
 from core.user.interfaces import UserRepository
 
