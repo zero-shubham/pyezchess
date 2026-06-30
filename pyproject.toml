@@ -31,7 +31,7 @@ dependencies = [
     "chess>=1.10.0",
     "psycopg[binary,pool]>=3.3.4",
     "langgraph-checkpoint-postgres>=3.1.0",
-    "dramatiq[rabbitmq]>=1.17.0",
+    "dbos>=2.26.0",
 ]
 
 [project.optional-dependencies]

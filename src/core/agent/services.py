@@ -9,7 +9,8 @@ from core.agent.models import ExplainResult, LLMClient, MovePlayedResult, QueryR
 from core.agent.workflows.move import run_move_workflow
 from core.agent.workflows.progress import run_progress_check
 from core.agent.workflows.query import run_query_workflow
-from core.tasks.actors import calculate_credit_usage
+from shared.dbos_client import client
+from shared.queues import CREDIT_USAGE_QUEUE
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class LangGraphInstructor(Instructor):
         self, game_svc: Any, session_id: str, input_tokens: int, output_tokens: int
     ) -> None:
         await game_svc.increment_token_usage(UUID(session_id), input_tokens, output_tokens)
-        calculate_credit_usage.send(input_tokens, output_tokens)
+        client.enqueue({"queue_name": CREDIT_USAGE_QUEUE, "workflow_name": "calculate_credit_usage"}, input_tokens, output_tokens)
 
     def _make_token_persist(self, game_svc: Any):
         async def _persist(session_id: str, input_tokens: int, output_tokens: int) -> None:

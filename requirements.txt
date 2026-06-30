@@ -225,6 +225,10 @@ cryptography==48.0.0 \
     --hash=sha256:ea8990436d914540a40ab24b6a77c0969695ed52f4a4874c5137ccf7045a7057 \
     --hash=sha256:f5333311663ea94f75dd408665686aaf426563556bb5283554a3539177e03b8c
     # via google-auth
+dbos==2.26.0 \
+    --hash=sha256:1be900963e7c00fdd9734a8defbc9e90acd32241d7ebea71e0a9af6c5b6090ea \
+    --hash=sha256:f60e57078d2f67e3938c0f9fc455a399654689d78645dd915214a442bd9474f4
+    # via pyezchess
 distro==1.9.0 \
     --hash=sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed \
     --hash=sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2
@@ -240,10 +244,6 @@ docstring-parser==0.18.0 \
     --hash=sha256:292510982205c12b1248696f44959db3cdd1740237a968ea1e2e7a900eeb2015 \
     --hash=sha256:b3fcbed555c47d8479be0796ef7e19c2670d428d72e96da63f3a40122860374b
     # via anthropic
-dramatiq==2.2.0 \
-    --hash=sha256:2b2aa244b4098e154600c47cdb2c04cec6c3af44e9e159c319c6fc8b6f0ba90e \
-    --hash=sha256:70c9278b0a9b880aeb23b8e09c9d43b1421ac8e807ef18903f6dd059130474a1
-    # via pyezchess
 email-validator==2.3.0 \
     --hash=sha256:80f13f623413e6b197ae73bb10bf4eb0908faf509ad8362c5edeb0be7fd450b4 \
     --hash=sha256:9fc05c37f2f6cf439ff414f8fc46d917929974a82244c20eb10231ba60c54426
@@ -566,10 +566,6 @@ packaging==26.2 \
     #   langchain-core
     #   langsmith
     #   pytest
-pika==1.4.1 \
-    --hash=sha256:2daae7bd422a0fc4f4879fd48c9a1932ed74a0bc7172e1e5f9bde63a101ed074 \
-    --hash=sha256:e851f3e4992adfbf8eb64e9b86d94e3382f92ba0200055abedbb29676b8e713b
-    # via dramatiq
 pluggy==1.6.0 \
     --hash=sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3 \
     --hash=sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746
@@ -578,6 +574,7 @@ psycopg==3.3.4 \
     --hash=sha256:b6bbc25ccf05c8fad3b061d9db2ef0909a555171b84b07f29458a447253d679a \
     --hash=sha256:e21207764952cff81b6b8bdacad9a3939f2793367fdac2987b3aac36a651b5bc
     # via
+    #   dbos
     #   langgraph-checkpoint-postgres
     #   pyezchess
 psycopg-binary==3.3.4 ; implementation_name != 'pypy' \
@@ -705,6 +702,10 @@ pytest-asyncio==1.3.0 \
     --hash=sha256:611e26147c7f77640e6d0a92a38ed17c3e9848063698d5c93d5aa7aa11cebff5 \
     --hash=sha256:d7f52f36d231b80ee124cd216ffb19369aa168fc10095013c6b014a34d3ee9e5
     # via pyezchess
+python-dateutil==2.9.0.post0 \
+    --hash=sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3 \
+    --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427
+    # via dbos
 python-dotenv==1.2.2 \
     --hash=sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a \
     --hash=sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3
@@ -737,6 +738,7 @@ pyyaml==6.0.3 \
     --hash=sha256:d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f \
     --hash=sha256:ebc55a14a21cb14062aa4162f906cd962b28e2e9ea38f9b4391244cd8de4ae0b
     # via
+    #   dbos
     #   langchain-core
     #   uvicorn
 regex==2026.4.4 \
@@ -864,6 +866,10 @@ shellingham==1.5.4 \
     --hash=sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686 \
     --hash=sha256:8dbca0739d487e5bd35ab3ca4b36e11c4078f3a234bfce294b0a0291363404de
     # via typer
+six==1.17.0 \
+    --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274 \
+    --hash=sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81
+    # via python-dateutil
 sniffio==1.3.1 \
     --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
     --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
@@ -889,6 +895,7 @@ sqlalchemy==2.0.49 \
     --hash=sha256:ec44cfa7ef1a728e88ad41674de50f6db8cfdb3e2af84af86e0041aaf02d43d0
     # via
     #   alembic
+    #   dbos
     #   pyezchess
 starlette==1.0.0 \
     --hash=sha256:6a4beaf1f81bb472fd19ea9b918b50dc3a77a6f2e190a12954b25e6ed5eea149 \
@@ -928,6 +935,11 @@ typer==0.25.1 \
     #   fastapi-cli
     #   fastapi-cloud-cli
     #   pyezchess
+    #   typer-slim
+typer-slim==0.24.0 \
+    --hash=sha256:d5d7ee1ee2834d5020c7c616ed5e0d0f29b9a4b1dd283bdebae198ec09778d0e \
+    --hash=sha256:f0ed36127183f52ae6ced2ecb2521789995992c521a46083bfcdbb652d22ad34
+    # via dbos
 typing-extensions==4.15.0 \
     --hash=sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466 \
     --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548
@@ -1059,6 +1071,7 @@ websockets==16.0 \
     --hash=sha256:daa3b6ff70a9241cf6c7fc9e949d41232d9d7d26fd3522b1ad2b4d62487e9904 \
     --hash=sha256:fd3cb4adb94a2a6e2b7c0d8d05cb94e6f1c81a0cf9dc2694fb65c7e8d94c42e4
     # via
+    #   dbos
     #   google-genai
     #   uvicorn
 xxhash==3.7.0 \

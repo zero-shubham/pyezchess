@@ -13,9 +13,9 @@ from api.v1.game_sessions import router as game_sessions_router
 from api.v1.users import router as users_router
 from api.v1.websocket import router as ws_router
 from shared.config import settings
-from core.game import SessionManager
+from core.game.session_manager import SessionManager
 from core.agent import PromptGetter
-from core.tasks import actors  # noqa: F401  # pyright: ignore[reportUnusedImport]  register actors + init broker
+
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),

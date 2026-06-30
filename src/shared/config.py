@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     log_level: str = "info"
     stockfish_path: str = "/usr/local/bin/stockfish"
-    rabbitmq_url: str = "amqp://guest:guest@localhost:5672"
+    dbos_system_database_url: str = "postgresql://postgres:postgres@localhost:5432/ezchess"
 
     llm_max_retries: int = 3
 
