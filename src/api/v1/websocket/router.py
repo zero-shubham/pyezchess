@@ -6,7 +6,8 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Cookie, WebSocket, WebSocketDisconnect
 
 from shared.config import get_available_provider_and_key, settings
-from core.game import GameSessionStatus, GameService, SessionEntry
+from core.game.services import GameService
+from core.game.session_manager import SessionEntry
 from core.agent import LangGraphInstructor, PromptGetter, create_llm_client, LLMProvider
 from shared.middleware import hash_token
 from shared.database import async_session_factory
@@ -106,13 +107,3 @@ async def game_websocket(
         pass
     finally:
         await game_service.remove_session(ws_session_id)
-        try:
-            if user_id:
-                game_svc = GameService(async_session_factory)
-                session = await game_svc.get_session(game_session_id)
-                if session:
-                    session.status = GameSessionStatus.ABANDONED
-                    await game_svc.update_session(session)
-                await game_svc.increment_token_usage(game_session_id, 0, 0)
-        except Exception:
-            pass

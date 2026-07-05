@@ -15,7 +15,8 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.runtime import Runtime
 
 
-from core.game import Event, EventRole, EventType, EzBoard, ToolProvider
+from core.game import Event, EventRole, EventType, EzBoard
+from core.game.tools import ToolProvider
 from core.agent.models import LLMClient, MessageOutput, NextMoveOutput, ScoreOutput, ToolExecutor
 from core.agent.prompts import PromptGetter
 from core.agent.token_tracker import TokenUsageCallback, log_token_usage, token_totals
@@ -139,7 +140,7 @@ FEN (after student move): {fen}
 Student move: {move}
 Instructor response: {next_move}
 
-Explain to the student why {next_move} was chosen in response. 2-3 sentences."""
+Explain to the student reasoning behind choosing/playing {next_move} as your move in response. 2-3 sentences."""
 
 MOVE_EXTRACT_PROMPT = """Workflow: move, step: compute_next_move (extraction)
 

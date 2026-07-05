@@ -52,7 +52,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: python -m core.tasks.worker
+    command: python -m worker
     environment:
       - DBOS_SYSTEM_DATABASE_URL=postgresql://postgres:postgres@db:5432/ezchess
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/ezchess

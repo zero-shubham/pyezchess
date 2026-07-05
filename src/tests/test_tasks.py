@@ -4,7 +4,7 @@ import logging
 
 import pytest
 
-from core.tasks.workflows import _calculate_credit_usage
+from core.tasks.token_usage import _calculate_credit_usage
 
 
 async def test_async_impl(caplog: pytest.LogCaptureFixture) -> None:

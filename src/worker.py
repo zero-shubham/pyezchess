@@ -9,7 +9,7 @@ from dbos import DBOS, DBOSConfig
 from shared.config import settings
 from shared.queues import CREDIT_USAGE_QUEUE
 
-from core.tasks.workflows import calculate_credit_usage  # noqa: F401
+from core.tasks.token_usage import calculate_credit_usage  # noqa: F401
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
